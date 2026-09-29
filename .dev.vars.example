@@ -1,0 +1,8 @@
+# Kopier til .dev.vars for lokal kjøring med `npm run dev`. Aldri commit .dev.vars.
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_ALLOWED_CHAT_ID=
+ANTHROPIC_API_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=

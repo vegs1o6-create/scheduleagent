@@ -1,0 +1,45 @@
+name = "familiebot"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# KV for tilstand: utkast, siste oppføring, ukeplan-historikk, token-cache.
+# Kjør `npx wrangler kv namespace create STATE` og lim inn id-en her.
+[[kv_namespaces]]
+binding = "STATE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Tyngre jobber (Claude-kall, PDF-analyse) kjøres i en kø, slik at
+# Telegram-webhooken alltid kan svare 200 med en gang.
+[[queues.producers]]
+binding = "JOBS"
+queue = "familiebot-jobs"
+
+[[queues.consumers]]
+queue = "familiebot-jobs"
+max_batch_size = 1
+max_batch_timeout = 1
+max_concurrency = 1
+max_retries = 0
+
+# Søndag kl. 18:00 Europe/Oslo. Cron kjører i UTC, så vi trigger både 16:00
+# og 17:00 UTC og sjekker lokal tid i koden (håndterer sommertid).
+[triggers]
+crons = ["0 16,17 * * SUN"]
+
+[vars]
+TIMEZONE = "Europe/Oslo"
+GOOGLE_CALENDAR_ID = "499d12834b64c2295b7cb8cbc7a44dfcce198b9552f204263cd5cf42418a637c@group.calendar.google.com"
+CLAUDE_MODEL = "claude-opus-5-5"
+CLAUDE_EFFORT = "medium"
+REQUIRE_APPROVAL_FOR_TEXT = "false"
+AUTO_APPROVE = "false"
+# Google Calendar colorId: 9 = Blåbær (blå), 4 = Flamingo (rosa), 5 = Banan (gul).
+CHILDREN = '[{"name":"Sverre","colorId":"9","aliases":["2C","2. klasse","klasse 2C"]},{"name":"Astrid","colorId":"4","aliases":["Friluftsgruppa","Tveteråsen","Tveteråsen barnehage","barnehagen"]}]'
+BOTH_COLOR_ID = "5"
+DEFAULT_EVENT_MINUTES = "60"
+EVENT_REMINDER_MINUTES = "60"
+LOW_CONFIDENCE = "0.7"
