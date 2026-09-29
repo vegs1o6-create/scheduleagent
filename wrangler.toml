@@ -47,4 +47,4 @@ EVENT_REMINDER_MINUTES = "60"
 LOW_CONFIDENCE = "0.7"
 # Google Drive-mappen som overvåkes (ID-en fra URL-en drive.google.com/drive/folders/<ID>).
 # Tom = Drive-inngangen er av.
-DRIVE_FOLDER_ID = ""
+DRIVE_FOLDER_ID = "1kljn8OYt8eo8684BMOLiiAZufFiR2I1C"
