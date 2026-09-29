@@ -1,5 +1,6 @@
 import type { Deps } from "../deps";
-import type { DriveFile } from "../drive";
+import { GOOGLE_DOC_MIME, type DriveFile } from "../drive";
+import { DOCX_MIME } from "../docx";
 import { escapeHtml as e } from "../telegram";
 import { mediaTypeOf, processWeekplan } from "./document";
 import { log } from "../log";
@@ -45,9 +46,10 @@ export async function pollDrive(deps: Deps): Promise<number> {
 
 /** Behandler én fil fra Drive (kjøres i køen). */
 export async function handleDriveFile(deps: Deps, file: DriveFile): Promise<void> {
-  const mediaType = mediaTypeOf(file.mimeType, file.name);
+  // Google Docs eksporteres som .docx ved nedlasting.
+  const mediaType = file.mimeType === GOOGLE_DOC_MIME ? DOCX_MIME : mediaTypeOf(file.mimeType, file.name);
   if (!mediaType) {
-    await deps.telegram.sendMessage(deps.chatId, `📁 Hoppet over «${e(file.name)}» i Drive: bare PDF og bilder støttes.`);
+    await deps.telegram.sendMessage(deps.chatId, `📁 Hoppet over «${e(file.name)}» i Drive: bare PDF, Word (.docx), Google Docs og bilder støttes.`);
     return;
   }
   if (file.size && Number(file.size) > MAX_DRIVE_BYTES) {
@@ -55,7 +57,7 @@ export async function handleDriveFile(deps: Deps, file: DriveFile): Promise<void
     return;
   }
   await deps.store.clearMode();
-  const bytes = await deps.drive.download(file.id);
+  const bytes = await deps.drive.download(file);
   await processWeekplan(deps, {
     bytes,
     mediaType,

@@ -71,8 +71,8 @@ describe("Google Drive-mappe", () => {
 
   it("hopper over filtyper som ikke støttes", async () => {
     const { deps, telegram, drive } = makeDeps(FOLDER);
-    await handleDriveFile(deps, { ...file("d", "2026-09-29T09:30:00.000Z"), name: "notat.docx", mimeType: "application/vnd.openxmlformats" });
-    expect(telegram.last().text).toContain("Hoppet over «notat.docx»");
+    await handleDriveFile(deps, { ...file("d", "2026-09-29T09:30:00.000Z"), name: "notat.odt", mimeType: "application/vnd.oasis.opendocument.text" });
+    expect(telegram.last().text).toContain("Hoppet over «notat.odt»");
     expect(drive.downloads).toHaveLength(0);
   });
 });

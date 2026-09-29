@@ -5,10 +5,15 @@ import { buildDateContext } from "../dates";
 import { escapeHtml as e } from "../telegram";
 import { approveExtraction, presentDraft } from "./drafts";
 import { log } from "../log";
+import { DOCX_MIME, MIN_DOCX_TEXT, extractDocx } from "../docx";
 
 const MAX_TELEGRAM_BYTES = 20 * 1024 * 1024; // Telegram getFile-grense
 
-const MIME_MAP: Record<string, MediaType> = {
+/** Filtyper boten kan lese: det Claude tar direkte, pluss Word (.docx). */
+export type InputType = MediaType | typeof DOCX_MIME;
+
+const MIME_MAP: Record<string, InputType> = {
+  [DOCX_MIME]: DOCX_MIME,
   "application/pdf": "application/pdf",
   "image/jpeg": "image/jpeg",
   "image/jpg": "image/jpeg",
@@ -17,13 +22,14 @@ const MIME_MAP: Record<string, MediaType> = {
   "image/gif": "image/gif",
 };
 
-export function mediaTypeOf(mime: string | undefined, name: string | undefined): MediaType | null {
+export function mediaTypeOf(mime: string | undefined, name: string | undefined): InputType | null {
   const byMime = MIME_MAP[(mime ?? "").toLowerCase()];
   if (byMime) return byMime;
   const ext = name?.toLowerCase().split(".").pop();
   if (ext === "pdf") return "application/pdf";
   if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
   if (ext === "png") return "image/png";
+  if (ext === "docx") return DOCX_MIME;
   return null;
 }
 
@@ -33,18 +39,28 @@ export function mediaTypeOf(mime: string | undefined, name: string | undefined):
  */
 export async function processWeekplan(
   deps: Deps,
-  input: { bytes: Uint8Array; mediaType: MediaType; caption: string | null; progressText: string },
+  input: { bytes: Uint8Array; mediaType: InputType; caption: string | null; progressText: string },
 ): Promise<void> {
   const { telegram, store, claude, config } = deps;
   const progressId = await telegram.sendMessage(deps.chatId, input.progressText);
   await telegram.sendChatAction(deps.chatId, "typing");
 
-  const extraction = await claude.extractDocument(
-    input.bytes,
-    input.mediaType,
-    input.caption,
-    buildDateContext(deps.now(), config.timezone),
-  );
+  const dateContext = buildDateContext(deps.now(), config.timezone);
+  let extraction;
+  if (input.mediaType === DOCX_MIME) {
+    const docx = await extractDocx(input.bytes);
+    log("docx_extracted", { chars: docx.text.length, hasImage: Boolean(docx.largestImage) });
+    if (docx.text.length >= MIN_DOCX_TEXT) {
+      extraction = await claude.extractDocumentText(docx.text, input.caption, dateContext);
+    } else if (docx.largestImage) {
+      // Ukeplanen er limt inn som bilde i Word-dokumentet.
+      extraction = await claude.extractDocument(docx.largestImage.bytes, docx.largestImage.mediaType, input.caption, dateContext);
+    } else {
+      throw new Error("Word-filen ser ut til å være tom. Send den som PDF i stedet.");
+    }
+  } else {
+    extraction = await claude.extractDocument(input.bytes, input.mediaType, input.caption, dateContext);
+  }
   log("weekplan_extracted", {
     child: extraction.child,
     week: extraction.week,
@@ -72,7 +88,7 @@ export async function handleDocument(deps: Deps, msg: TgMessage): Promise<void> 
   await store.clearMode();
 
   let fileId: string;
-  let mediaType: MediaType | null;
+  let mediaType: InputType | null;
   let size: number | undefined;
   if (msg.document) {
     fileId = msg.document.file_id;
@@ -88,7 +104,7 @@ export async function handleDocument(deps: Deps, msg: TgMessage): Promise<void> 
   }
 
   if (!mediaType) {
-    await telegram.sendMessage(deps.chatId, "Jeg støtter bare PDF og bilder (jpg/png).");
+    await telegram.sendMessage(deps.chatId, "Jeg støtter PDF, Word (.docx) og bilder (jpg/png). Gamle .doc-filer må lagres som .docx eller PDF først.");
     return;
   }
   if (size && size > MAX_TELEGRAM_BYTES) {

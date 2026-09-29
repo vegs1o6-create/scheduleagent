@@ -3,7 +3,7 @@
 En Telegram-bot som håndterer familiens kalender og påminnelser. Den tar imot ukeplaner (PDF/bilde) og fritekst, trekker ut det viktige med Claude API, og skriver til Google Kalender. Botten kjører som en Cloudflare Worker (TypeScript) med KV, Queues og Cron Trigger.
 
 - **Fritekst:** «Sverre har fotball torsdag kl 17» havner rett i kalenderen, og du får en kvittering med lenke. Rettelser som «nei, kl. 09» oppdaterer siste oppføring.
-- **Ukeplan:** Du sender PDF eller bilde i Telegram, **eller legger PDF-en i en Google Drive-mappe**. Du får en oppsummering med knappene **[OK] [Rett] [Avbryt]**, og ingenting skrives før du trykker OK.
+- **Ukeplan:** Du sender PDF, Word (.docx) eller bilde i Telegram, **eller legger filen i en Google Drive-mappe** (der fungerer også Google Docs). Du får en oppsummering med knappene **[OK] [Rett] [Avbryt]**, og ingenting skrives før du trykker OK.
 - **Kommandoer:** `/uke`, `/neste`, `/angre` og `/hjelp`.
 - **Søndag kl. 18:** Botten minner deg på ukeplanen hvis ingen er behandlet siden mandag.
 
@@ -37,6 +37,7 @@ Alt arbeid mot Claude skjer i køen. PDF-analyse kan ta lenger enn de 30 sekunde
 | `src/claude.ts` | Systemprompt og Claude-kall (structured outputs) |
 | `src/schema.ts` | JSON-skjema (zod), streng validering og normalisering |
 | `src/mapping.ts` | Kalenderregler: punkt → Google-hendelse(r) |
+| `src/docx.ts` | Uttrekk av tekst (og tabeller) fra Word-filer |
 | `src/key.ts` | Idempotensnøkkel `agentKey` |
 | `src/dates.ts` | Tidssone, ISO-uker og relative datoer |
 | `src/google-auth.ts` | OAuth med refresh token, delt av Kalender og Drive |
@@ -258,6 +259,16 @@ npm run typecheck
   - «fredag» / «på fredag» = førstkommende fredag etter i dag.
   - «neste fredag» = fredag i neste uke.
 
+### Word-filer (.docx)
+
+Claude kan ikke lese .docx direkte, så botten gjør om Word-filen til tekst først. Det skjer i Workeren, uten eksterne biblioteker:
+
+- **Avsnitt** blir linjer.
+- **Tabeller** blir `| celle | celle |`-rader, slik at kolonner som ukedager kommer med.
+- **Topp- og bunntekst** tas med. Der står ofte ukenummeret.
+
+Teksten sendes til Claude som et dokument. Inneholder Word-filen nesten ingen tekst, fordi ukeplanen er limt inn som et bilde, sendes det største bildet i stedet. Google Docs i Drive-mappen eksporteres som .docx og behandles likt.
+
 ### Tillegg til JSON-skjemaet
 
 Skjemaet følger spesifikasjonen, med to tillegg per punkt:
@@ -286,5 +297,6 @@ Går du over CPU-grensen en sjelden gang, avbryter Cloudflare kallet, og botten 
 
 - **KV er eventually consistent:** Endringer kan bruke opptil ett minutt på å nå andre lokasjoner. All tilstand leses og skrives fra køen, med én jobb om gangen (`max_concurrency = 1`), så i praksis er dette ikke et problem for én bruker.
 - **Ukeplaner med veldig mange punkter** (over ~35 kalenderhendelser på én gang) kan gå over grensen på 50 utgående kall i Workers Free.
-- **Drive:** Filer oppdages innen ~5 minutter. Google-dokumenter (Docs-format) støttes ikke, bare PDF og bilder.
+- **Drive:** Filer oppdages innen ~5 minutter.
+- **Word:** Bare `.docx`. Gamle `.doc`-filer må lagres som `.docx` eller PDF først. Tekstbokser og figurer med tekst i Word leses ikke alltid. Ser oppsummeringen tom ut, send filen som PDF.
 - **Filstørrelse:** Telegram lar boter laste ned filer på maks 20 MB.

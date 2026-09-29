@@ -13,7 +13,7 @@ export const HELP_TEXT = `<b>Familiebot</b> 👨‍👩‍👧‍👦
 • «Svarslipp til skoleturen må leveres innen fredag»
 • Rettelse: «nei, kl. 09» (retter siste oppføring, eller svar på kvitteringen)
 
-<b>Send ukeplan</b> som PDF eller bilde her, eller legg PDF-en i Drive-mappen (sjekkes hvert 5. minutt). Du får en oppsummering med [OK] [Rett] [Avbryt]; ingenting lagres før du trykker OK.
+<b>Send ukeplan</b> som PDF, Word (.docx) eller bilde her, eller legg filen i Drive-mappen (sjekkes hvert 5. minutt). Du får en oppsummering med [OK] [Rett] [Avbryt]; ingenting lagres før du trykker OK.
 
 <b>Kommandoer</b>
 /uke – denne ukens oppføringer

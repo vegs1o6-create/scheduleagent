@@ -95,7 +95,7 @@ export class FakeTelegram {
   sent: SentMessage[] = [];
   removedKeyboards: number[] = [];
   private seq = 1000;
-  file = new Uint8Array([37, 80, 68, 70]); // "%PDF"
+  file: Uint8Array = new Uint8Array([37, 80, 68, 70]); // "%PDF"
 
   async sendMessage(_chat: string | number, text: string, keyboard?: Keyboard, replyTo?: number) {
     const id = ++this.seq;
@@ -127,9 +127,11 @@ export class FakeDrive implements DriveApi {
     this.listCalls.push({ folderId, since });
     return this.files.filter((f) => f.createdTime > since || f.modifiedTime > since);
   }
-  async download(fileId: string) {
-    this.downloads.push(fileId);
-    return new Uint8Array([37, 80, 68, 70]);
+  /** Innhold per fil-ID (standard: "%PDF"). */
+  contents = new Map<string, Uint8Array>();
+  async download(file: { id: string; mimeType: string }) {
+    this.downloads.push(file.id);
+    return this.contents.get(file.id) ?? new Uint8Array([37, 80, 68, 70]);
   }
 }
 
@@ -146,7 +148,16 @@ export class FakeClaude implements ClaudeApi {
     if (!r) throw new Error("FakeClaude: ingen textResult i kø");
     return structuredClone(r);
   }
-  async extractDocument() {
+  async extractDocument(_data: Uint8Array, mediaType: string) {
+    this.imageDocuments.push(mediaType);
+    const r = this.extractions.shift();
+    if (!r) throw new Error("FakeClaude: ingen extraction i kø");
+    return structuredClone(r);
+  }
+  textDocuments: string[] = [];
+  imageDocuments: string[] = [];
+  async extractDocumentText(text: string) {
+    this.textDocuments.push(text);
     const r = this.extractions.shift();
     if (!r) throw new Error("FakeClaude: ingen extraction i kø");
     return structuredClone(r);
