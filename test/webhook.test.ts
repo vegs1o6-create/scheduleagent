@@ -135,3 +135,23 @@ describe("oppsettside (/setup)", () => {
     fetchSpy.mockRestore();
   });
 });
+
+describe("toleranse for mellomrom i secrets", () => {
+  it("godtar secret med linjeskift/mellomrom fra dashboardet", async () => {
+    const { env, ctx, sent } = makeEnv();
+    (env as unknown as Record<string, string>).TELEGRAM_WEBHOOK_SECRET = ` ${SECRET}\n`;
+    const res = await worker.fetch(req(msg(4242), SECRET), env, ctx);
+    expect(res.status).toBe(200);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("/setup forklarer hvorfor nøkkelen ble avvist, uten å vise den", async () => {
+    const { env, ctx } = makeEnv();
+    const wrong = await (await worker.fetch(new Request("https://bot.example/setup?key=feil"), env, ctx)).text();
+    expect(wrong).toContain(`secret er ${SECRET.length} tegn lang; nøkkelen i adressen er 4 tegn`);
+    expect(wrong).not.toContain(SECRET);
+    (env as unknown as Record<string, string | undefined>).TELEGRAM_WEBHOOK_SECRET = undefined;
+    const missing = await (await worker.fetch(new Request("https://bot.example/setup?key=x"), env, ctx)).text();
+    expect(missing).toContain("finner ingen TELEGRAM_WEBHOOK_SECRET");
+  });
+});

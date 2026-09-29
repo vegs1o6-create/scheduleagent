@@ -2,6 +2,8 @@ name = "familiebot"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
+# Ikke slett variabler som er lagt inn i Cloudflare-dashboardet ved deploy.
+keep_vars = true
 
 [observability]
 enabled = true

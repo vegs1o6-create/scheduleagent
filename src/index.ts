@@ -25,23 +25,23 @@ export function buildDeps(env: Env): Deps {
   const store = new Store(env.STATE);
   const auth = new GoogleAuth(
     {
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
-      refreshToken: env.GOOGLE_REFRESH_TOKEN,
+      clientId: (env.GOOGLE_CLIENT_ID ?? "").trim(),
+      clientSecret: (env.GOOGLE_CLIENT_SECRET ?? "").trim(),
+      refreshToken: (env.GOOGLE_REFRESH_TOKEN ?? "").trim(),
     },
     env.STATE,
   );
   return {
     config,
     store,
-    telegram: new Telegram(env.TELEGRAM_BOT_TOKEN),
+    telegram: new Telegram((env.TELEGRAM_BOT_TOKEN ?? "").trim()),
     calendar: new GoogleCalendar(config.calendarId, auth),
     drive: new GoogleDrive(auth),
-    claude: new ClaudeClient(env.ANTHROPIC_API_KEY, config),
+    claude: new ClaudeClient((env.ANTHROPIC_API_KEY ?? "").trim(), config),
     enqueue: async (job) => {
       await env.JOBS.send(job);
     },
-    chatId: env.TELEGRAM_ALLOWED_CHAT_ID.trim(),
+    chatId: (env.TELEGRAM_ALLOWED_CHAT_ID ?? "").trim(),
     now: () => new Date(),
   };
 }

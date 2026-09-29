@@ -13,10 +13,11 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export function verifySecret(request: Request, secret: string): boolean {
+export function verifySecret(request: Request, secret: string | undefined): boolean {
   const header = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
-  if (!header || !secret) return false;
-  return timingSafeEqual(header, secret);
+  const expected = secret?.trim();
+  if (!header || !expected) return false;
+  return timingSafeEqual(header, expected);
 }
 
 export function isAllowedChat(update: TgUpdate, allowedChatId: string): boolean {
@@ -52,7 +53,7 @@ export async function handleWebhook(request: Request, env: Env, ctx: ExecutionCo
   if (update.callback_query) {
     const id = update.callback_query.id;
     ctx.waitUntil(
-      fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      fetch(`https://api.telegram.org/bot${(env.TELEGRAM_BOT_TOKEN ?? "").trim()}/answerCallbackQuery`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ callback_query_id: id }),

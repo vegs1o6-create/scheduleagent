@@ -33,7 +33,7 @@ async function check(name: string, fn: () => Promise<string>): Promise<Check> {
 }
 
 async function telegram<T>(env: Env, method: string, body?: unknown): Promise<T> {
-  const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
+  const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN?.trim()}/${method}`, {
     method: body ? "POST" : "GET",
     headers: body ? { "content-type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -52,12 +52,22 @@ async function telegram<T>(env: Env, method: string, body?: unknown): Promise<T>
  */
 export async function handleSetup(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const key = url.searchParams.get("key") ?? "";
-  if (!env.TELEGRAM_WEBHOOK_SECRET || !timingSafeEqual(key, env.TELEGRAM_WEBHOOK_SECRET)) {
-    log("setup_rejected", {});
+  const key = (url.searchParams.get("key") ?? "").trim();
+  const secret = env.TELEGRAM_WEBHOOK_SECRET?.trim() ?? "";
+  if (!secret || !timingSafeEqual(key, secret)) {
+    log("setup_rejected", { hasSecret: Boolean(secret) });
+    // Hjelpsom feilmelding uten å avsløre verdien (bare lengden).
+    const reason = !secret
+      ? "Workeren finner ingen TELEGRAM_WEBHOOK_SECRET.\n" +
+        "Sjekk under Settings → Variables and Secrets at den finnes, at Type er «Secret» (ikke «Text»),\n" +
+        "og at du trykket Deploy etter at du lagret den."
+      : `Nøkkelen i adressen stemmer ikke med TELEGRAM_WEBHOOK_SECRET.\n` +
+        `Workerens secret er ${secret.length} tegn lang; nøkkelen i adressen er ${key.length} tegn.` +
+        (key.length === 0 ? "\nDu har ikke tatt med ?key=... i adressen." : "") +
+        (/[^A-Za-z0-9_-]/.test(key) ? "\nNøkkelen inneholder tegn utenom A-Z, a-z, 0-9, _ og -. Bruk bare disse." : "");
     return new Response(
-      "Feil eller manglende nøkkel.\n\nBruk: /setup?key=<verdien du la inn som TELEGRAM_WEBHOOK_SECRET i Cloudflare>\n",
-      { status: 401, headers: { "content-type": "text/plain; charset=utf-8" } },
+      `Feil eller manglende nøkkel.\n\n${reason}\n\nBruk: /setup?key=<verdien du la inn som TELEGRAM_WEBHOOK_SECRET i Cloudflare>\n`,
+      { status: 401, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } },
     );
   }
 
@@ -69,7 +79,7 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
     detail: missing.length ? `Mangler: ${missing.join(", ")}` : "Alle 7 er lagt inn",
   });
 
-  if (!/^[A-Za-z0-9_-]{1,256}$/.test(env.TELEGRAM_WEBHOOK_SECRET)) {
+  if (!/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
     checks.push({
       name: "Webhook-secret",
       ok: false,
@@ -89,7 +99,7 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
     await check("Telegram-webhook", async () => {
       await telegram(env, "setWebhook", {
         url: webhookUrl,
-        secret_token: env.TELEGRAM_WEBHOOK_SECRET,
+        secret_token: secret,
         allowed_updates: ["message", "callback_query"],
       });
       const info = await telegram<{ url: string; pending_update_count: number; last_error_message?: string }>(
@@ -111,7 +121,11 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
 
   const config = loadConfig(env);
   const auth = new GoogleAuth(
-    { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, refreshToken: env.GOOGLE_REFRESH_TOKEN },
+    {
+      clientId: env.GOOGLE_CLIENT_ID?.trim() ?? "",
+      clientSecret: env.GOOGLE_CLIENT_SECRET?.trim() ?? "",
+      refreshToken: env.GOOGLE_REFRESH_TOKEN?.trim() ?? "",
+    },
     env.STATE,
   );
   const googleOk = await check("Google-innlogging", async () => {
@@ -146,7 +160,7 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
 
   checks.push(
     await check("Claude API", async () => {
-      const model = await new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }).models.retrieve(config.model);
+      const model = await new Anthropic({ apiKey: env.ANTHROPIC_API_KEY?.trim() }).models.retrieve(config.model);
       return `Nøkkelen virker (${model.id})`;
     }),
   );
