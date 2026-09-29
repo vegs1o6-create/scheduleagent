@@ -10,7 +10,7 @@ enabled = true
 # Kjør `npx wrangler kv namespace create STATE` og lim inn id-en her.
 [[kv_namespaces]]
 binding = "STATE"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "991f1816853e4327bdf17b49061856a6"
 
 # Tyngre jobber (Claude-kall, PDF-analyse) kjøres i en kø, slik at
 # Telegram-webhooken alltid kan svare 200 med en gang.
