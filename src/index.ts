@@ -37,7 +37,7 @@ export function buildDeps(env: Env): Deps {
     telegram: new Telegram((env.TELEGRAM_BOT_TOKEN ?? "").trim()),
     calendar: new GoogleCalendar(config.calendarId, auth),
     drive: new GoogleDrive(auth),
-    claude: new ClaudeClient((env.ANTHROPIC_API_KEY ?? "").trim(), config),
+    claude: new ClaudeClient((env.ANTHROPIC_API_KEY ?? "").trim(), config, env.ANTHROPIC_WORKSPACE_ID),
     enqueue: async (job) => {
       await env.JOBS.send(job);
     },

@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropicClient } from "./claude";
 import type { Env } from "./env";
 import { loadConfig } from "./env";
 import { GoogleAuth } from "./google-auth";
@@ -164,8 +164,21 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
 
   checks.push(
     await check("Claude API", async () => {
-      const model = await new Anthropic({ apiKey: env.ANTHROPIC_API_KEY?.trim() }).models.retrieve(config.model);
-      return `Nøkkelen virker (${model.id})`;
+      try {
+        const model = await anthropicClient(env.ANTHROPIC_API_KEY?.trim() ?? "", env.ANTHROPIC_WORKSPACE_ID).models.retrieve(
+          config.model,
+        );
+        return `Nøkkelen virker (${model.id})`;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("anthropic-workspace-id")) {
+          throw new Error(
+            "Nøkkelen er ikke knyttet til et workspace. Enten: lag en ny nøkkel inne i et workspace på console.anthropic.com " +
+              "og bytt ANTHROPIC_API_KEY, eller legg inn workspace-ID-en (wrkspc_…) som secret ANTHROPIC_WORKSPACE_ID.",
+          );
+        }
+        throw err;
+      }
     }),
   );
 

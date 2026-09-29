@@ -62,14 +62,21 @@ Ukeplaner: "source" = "ukeplan", "week" = ISO-uke (f.eks. "2026-W40"). Ta med al
 Fritekst: "source" = "fritekst". Én melding kan gi flere punkter.`;
 }
 
+/** Anthropic-klient, med workspace-header når nøkkelen ikke er knyttet til et workspace. */
+export function anthropicClient(apiKey: string, workspaceId?: string): Anthropic {
+  const ws = workspaceId?.trim();
+  return new Anthropic({ apiKey, ...(ws ? { defaultHeaders: { "anthropic-workspace-id": ws } } : {}) });
+}
+
 export class ClaudeClient implements ClaudeApi {
   private readonly client: Anthropic;
 
   constructor(
     apiKey: string,
     private readonly config: Config,
+    workspaceId?: string,
   ) {
-    this.client = new Anthropic({ apiKey });
+    this.client = anthropicClient(apiKey, workspaceId);
   }
 
   private async run<T>(

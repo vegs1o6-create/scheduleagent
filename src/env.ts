@@ -9,6 +9,8 @@ export interface Env {
   TELEGRAM_WEBHOOK_SECRET: string;
   TELEGRAM_ALLOWED_CHAT_ID: string;
   ANTHROPIC_API_KEY: string;
+  /** Valgfri: trengs bare for API-nøkler som ikke er knyttet til et workspace. */
+  ANTHROPIC_WORKSPACE_ID?: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GOOGLE_REFRESH_TOKEN: string;

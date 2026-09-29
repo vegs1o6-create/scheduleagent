@@ -21,7 +21,8 @@ export class GoogleAuth {
   constructor(
     private readonly creds: GoogleCredentials,
     private readonly cache: TokenCache,
-    private readonly fetchImpl: typeof fetch = fetch,
+    // Ikke `= fetch` direkte: kalt som this.fetchImpl(...) gir «Illegal invocation» i Workers.
+    private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   async accessToken(forceRefresh = false): Promise<string> {

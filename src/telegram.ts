@@ -11,7 +11,8 @@ export type Keyboard = InlineButton[][];
 export class Telegram {
   constructor(
     private readonly token: string,
-    private readonly fetchImpl: typeof fetch = fetch,
+    // Ikke `= fetch` direkte: kalt som this.fetchImpl(...) gir «Illegal invocation» i Workers.
+    private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   private async call<T>(method: string, body: Record<string, unknown>): Promise<T> {
