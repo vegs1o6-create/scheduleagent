@@ -153,5 +153,8 @@ describe("toleranse for mellomrom i secrets", () => {
     (env as unknown as Record<string, string | undefined>).TELEGRAM_WEBHOOK_SECRET = undefined;
     const missing = await (await worker.fetch(new Request("https://bot.example/setup?key=x"), env, ctx)).text();
     expect(missing).toContain("finner ingen TELEGRAM_WEBHOOK_SECRET");
+    expect(missing).toContain("✅ TELEGRAM_BOT_TOKEN");
+    expect(missing).toContain("❌ ANTHROPIC_API_KEY");
+    expect(missing).not.toContain("123:abc");
   });
 });

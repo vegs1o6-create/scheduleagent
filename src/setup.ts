@@ -57,10 +57,14 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
   if (!secret || !timingSafeEqual(key, secret)) {
     log("setup_rejected", { hasSecret: Boolean(secret) });
     // Hjelpsom feilmelding uten å avsløre verdien (bare lengden).
+    const present = REQUIRED_SECRETS.map(
+      (n) => `  ${(env as unknown as Record<string, string | undefined>)[n]?.trim() ? "✅" : "❌"} ${n}`,
+    ).join("\n");
     const reason = !secret
       ? "Workeren finner ingen TELEGRAM_WEBHOOK_SECRET.\n" +
         "Sjekk under Settings → Variables and Secrets at den finnes, at Type er «Secret» (ikke «Text»),\n" +
-        "og at du trykket Deploy etter at du lagret den."
+        "og at du trykket Deploy etter at du lagret den.\n\n" +
+        `Dette er hva workeren på ${url.host} finner (bare ja/nei, ingen verdier):\n${present}`
       : `Nøkkelen i adressen stemmer ikke med TELEGRAM_WEBHOOK_SECRET.\n` +
         `Workerens secret er ${secret.length} tegn lang; nøkkelen i adressen er ${key.length} tegn.` +
         (key.length === 0 ? "\nDu har ikke tatt med ?key=... i adressen." : "") +
