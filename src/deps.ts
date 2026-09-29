@@ -1,6 +1,7 @@
 import type { CalendarApi } from "./calendar";
 import type { ClaudeApi } from "./claude";
-import type { Config } from "./env";
+import type { Config, JobMessage } from "./env";
+import type { DriveApi } from "./drive";
 import type { Store } from "./store";
 import type { Telegram } from "./telegram";
 
@@ -14,6 +15,8 @@ export interface Deps {
   >;
   calendar: CalendarApi;
   claude: ClaudeApi;
+  drive: DriveApi;
+  enqueue: (job: JobMessage) => Promise<void>;
   chatId: string;
   now: () => Date;
 }

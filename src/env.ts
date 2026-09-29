@@ -25,13 +25,13 @@ export interface Env {
   DEFAULT_EVENT_MINUTES?: string;
   EVENT_REMINDER_MINUTES?: string;
   LOW_CONFIDENCE?: string;
+  DRIVE_FOLDER_ID?: string;
 }
 
-/** Jobben som legges i køen: hele Telegram-oppdateringen. */
-export interface JobMessage {
-  kind: "telegram_update";
-  update: unknown;
-}
+/** Jobber som legges i køen. */
+export type JobMessage =
+  | { kind: "telegram_update"; update: unknown }
+  | { kind: "drive_file"; file: import("./drive").DriveFile };
 
 const ChildConfigSchema = z.object({
   name: z.string().min(1),
@@ -54,6 +54,8 @@ export interface Config {
   defaultEventMinutes: number;
   eventReminderMinutes: number;
   lowConfidence: number;
+  /** Google Drive-mappe som overvåkes for nye ukeplaner (tom = av). */
+  driveFolderId: string | null;
 }
 
 function flag(value: string | undefined, fallback: boolean): boolean {
@@ -76,7 +78,7 @@ export function loadConfig(env: Env): Config {
   return {
     timezone: env.TIMEZONE || "Europe/Oslo",
     calendarId: env.GOOGLE_CALENDAR_ID,
-    model: env.CLAUDE_MODEL || "claude-opus-5-5",
+    model: env.CLAUDE_MODEL || "claude-sonnet-5-5",
     effort: EFFORTS.includes(effort) ? effort : "medium",
     requireApprovalForText: flag(env.REQUIRE_APPROVAL_FOR_TEXT, false),
     autoApprove: flag(env.AUTO_APPROVE, false),
@@ -85,5 +87,6 @@ export function loadConfig(env: Env): Config {
     defaultEventMinutes: num(env.DEFAULT_EVENT_MINUTES, 60),
     eventReminderMinutes: num(env.EVENT_REMINDER_MINUTES, 60),
     lowConfidence: num(env.LOW_CONFIDENCE, 0.7),
+    driveFolderId: env.DRIVE_FOLDER_ID?.trim() || null,
   };
 }

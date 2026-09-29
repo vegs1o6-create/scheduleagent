@@ -6,7 +6,8 @@
  *   GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... node scripts/google-refresh-token.mjs
  *
  * Krever en OAuth-klient av typen "Desktop app" i Google Cloud Console.
- * Scopes: kun calendar.events + calendar.readonly.
+ * Scopes: calendar.events + calendar.readonly, og drive.readonly for
+ * Drive-mappen med ukeplaner (sett INCLUDE_DRIVE=false for å droppe den).
  * Skriver refresh token til terminalen – lim den inn med
  *   npx wrangler secret put GOOGLE_REFRESH_TOKEN
  * og ikke lagre den noe annet sted.
@@ -27,6 +28,7 @@ const state = randomBytes(16).toString("hex");
 const scopes = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.readonly",
+  ...(process.env.INCLUDE_DRIVE === "false" ? [] : ["https://www.googleapis.com/auth/drive.readonly"]),
 ];
 
 const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");

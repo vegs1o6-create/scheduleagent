@@ -1,7 +1,8 @@
 import type { CalendarApi, CalendarEvent, UpsertResult } from "../src/calendar";
 import type { ClaudeApi, TextContext } from "../src/claude";
 import type { Deps } from "../src/deps";
-import { loadConfig, type Env } from "../src/env";
+import { loadConfig, type Env, type JobMessage } from "../src/env";
+import type { DriveApi, DriveFile } from "../src/drive";
 import type { GoogleEventBody } from "../src/mapping";
 import type { Extraction, TextResult } from "../src/schema";
 import { Store } from "../src/store";
@@ -25,6 +26,8 @@ export class FakeKV {
 export class FakeCalendar implements CalendarApi {
   events = new Map<string, CalendarEvent & { body: GoogleEventBody }>();
   deleted: string[] = [];
+  /** Antall "API-kall" (for å sjekke grensen på 50 per kjøring på Workers Free). */
+  calls = 0;
   private seq = 0;
 
   private toEvent(id: string, body: GoogleEventBody) {
@@ -41,11 +44,18 @@ export class FakeCalendar implements CalendarApi {
     };
   }
 
+  async listAgentEvents() {
+    this.calls++;
+    return [...this.events.values()].filter((e) => e.extendedProperties?.private?.agent === "familiebot");
+  }
   async findByAgentKey(agentKey: string) {
+    this.calls++;
     return [...this.events.values()].find((e) => e.extendedProperties?.private?.agentKey === agentKey) ?? null;
   }
-  async upsert(body: GoogleEventBody): Promise<UpsertResult> {
-    const existing = await this.findByAgentKey(body.extendedProperties.private.agentKey!);
+  async upsert(body: GoogleEventBody, known?: CalendarEvent | null): Promise<UpsertResult> {
+    const found = known === undefined ? await this.findByAgentKey(body.extendedProperties.private.agentKey!) : known;
+    const existing = found ? this.events.get(found.id) : undefined;
+    this.calls++;
     if (existing) {
       if (JSON.stringify(existing.body) === JSON.stringify(body)) return { event: existing, action: "unchanged" };
       const ev = this.toEvent(existing.id, body);
@@ -109,6 +119,20 @@ export class FakeTelegram {
   }
 }
 
+export class FakeDrive implements DriveApi {
+  files: DriveFile[] = [];
+  listCalls: { folderId: string; since: string }[] = [];
+  downloads: string[] = [];
+  async listNewFiles(folderId: string, since: string) {
+    this.listCalls.push({ folderId, since });
+    return this.files.filter((f) => f.createdTime > since || f.modifiedTime > since);
+  }
+  async download(fileId: string) {
+    this.downloads.push(fileId);
+    return new Uint8Array([37, 80, 68, 70]);
+  }
+}
+
 export class FakeClaude implements ClaudeApi {
   textResults: TextResult[] = [];
   extractions: Extraction[] = [];
@@ -152,6 +176,8 @@ export function makeDeps(overrides: Partial<Env> = {}, now: Date = NOW) {
   const telegram = new FakeTelegram();
   const calendar = new FakeCalendar();
   const claude = new FakeClaude();
+  const drive = new FakeDrive();
+  const jobs: JobMessage[] = [];
   const config = loadConfig({ ...TEST_ENV_VARS, ...overrides } as unknown as Env);
   const deps: Deps = {
     config,
@@ -159,10 +185,12 @@ export function makeDeps(overrides: Partial<Env> = {}, now: Date = NOW) {
     telegram,
     calendar,
     claude,
+    drive,
+    enqueue: async (job) => void jobs.push(job),
     chatId: CHAT_ID,
     now: () => now,
   };
-  return { deps, kv, telegram, calendar, claude };
+  return { deps, kv, telegram, calendar, claude, drive, jobs };
 }
 
 let updateSeq = 1;

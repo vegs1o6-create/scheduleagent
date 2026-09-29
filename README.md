@@ -3,7 +3,7 @@
 En Telegram-bot som håndterer familiens kalender og påminnelser. Den tar imot ukeplaner (PDF/bilde) og fritekst, trekker ut det viktige med Claude API, og skriver til Google Kalender. Botten kjører som en Cloudflare Worker (TypeScript) med KV, Queues og Cron Trigger.
 
 - **Fritekst:** «Sverre har fotball torsdag kl 17» havner rett i kalenderen, og du får en kvittering med lenke. Rettelser som «nei, kl. 09» oppdaterer siste oppføring.
-- **Ukeplan:** Du sender PDF eller bilde og får en oppsummering med knappene **[OK] [Rett] [Avbryt]**. Ingenting skrives før du trykker OK.
+- **Ukeplan:** Du sender PDF eller bilde i Telegram, **eller legger PDF-en i en Google Drive-mappe**. Du får en oppsummering med knappene **[OK] [Rett] [Avbryt]**, og ingenting skrives før du trykker OK.
 - **Kommandoer:** `/uke`, `/neste`, `/angre` og `/hjelp`.
 - **Søndag kl. 18:** Botten minner deg på ukeplanen hvis ingen er behandlet siden mandag.
 
@@ -20,6 +20,7 @@ Telegram ──webhook──▶ Worker (fetch)
                                            ├─ Google Calendar API (upsert via agentKey)
                                            ├─ KV (utkast, siste oppføringer, ukeplanhistorikk, token-cache)
                                            └─ Telegram (oppsummering, knapper, kvitteringer)
+Cron (hvert 5. min) ───▶ Worker (scheduled) ──▶ nye filer i Drive-mappen? ──▶ Queue
 Cron (søn 16/17 UTC) ──▶ Worker (scheduled) ──▶ påminnelse kl. 18 Oslo-tid
 ```
 
@@ -38,7 +39,9 @@ Alt arbeid mot Claude skjer i køen. PDF-analyse kan ta lenger enn de 30 sekunde
 | `src/mapping.ts` | Kalenderregler: punkt → Google-hendelse(r) |
 | `src/key.ts` | Idempotensnøkkel `agentKey` |
 | `src/dates.ts` | Tidssone, ISO-uker og relative datoer |
-| `src/calendar.ts` | Google Calendar-klient (OAuth med refresh token) |
+| `src/google-auth.ts` | OAuth med refresh token, delt av Kalender og Drive |
+| `src/calendar.ts` | Google Calendar-klient |
+| `src/drive.ts`, `src/handlers/drive.ts` | Overvåking av Drive-mappen |
 | `src/store.ts` | KV-nøkler og tilstand |
 | `test/` | Tester og eksempler på ukeplaner og fritekst |
 
@@ -55,11 +58,12 @@ Alt arbeid mot Claude skjer i køen. PDF-analyse kan ta lenger enn de 30 sekunde
 | `BOTH_COLOR_ID` | `5` (gul) | Fargen for «Begge» |
 | `REQUIRE_APPROVAL_FOR_TEXT` | `false` | `true`: fritekst går også gjennom [OK]/[Rett]/[Avbryt] |
 | `AUTO_APPROVE` | `false` | `true`: ukeplaner skrives uten godkjenning |
-| `CLAUDE_MODEL` | `claude-opus-5-5` | Claude-modellen som brukes |
+| `CLAUDE_MODEL` | `claude-sonnet-5-5` | Claude-modellen som brukes |
 | `CLAUDE_EFFORT` | `medium` | `low`/`medium`/`high`: høyere gir grundigere, men tregere og dyrere svar |
 | `DEFAULT_EVENT_MINUTES` | `60` | Lengden på en hendelse når bare starttid er kjent |
 | `EVENT_REMINDER_MINUTES` | `60` | Varsel før hendelser med klokkeslett |
 | `LOW_CONFIDENCE` | `0.7` | Punkter under denne grensen markeres med ⚠️ |
+| `DRIVE_FOLDER_ID` | tom (av) | Google Drive-mappen som overvåkes for nye ukeplaner |
 
 Fargekoder i Google Calendar: 1 lavendel, 2 salvie, 3 drue, **4 flamingo (rosa)**, **5 banan (gul)**, 6 mandarin, 7 påfugl, 8 grafitt, **9 blåbær (blå)**, 10 basilikum, 11 tomat.
 
@@ -96,15 +100,15 @@ npx wrangler login
 
 ### 3. Google OAuth
 
-Botten bruker bare to scopes: **`calendar.events`** og **`calendar.readonly`**.
+Botten bruker tre scopes: **`calendar.events`** og **`calendar.readonly`** for kalenderen, og **`drive.readonly`** for Drive-mappen. Botten kan bare *lese* filer i Drive, ikke endre eller slette dem. Vil du ikke bruke Drive, kjører du scriptet med `INCLUDE_DRIVE=false`, og da får du bare de to kalender-scopene.
 
 1. Gå til [Google Cloud Console](https://console.cloud.google.com/) og opprett et prosjekt, f.eks. «familiebot».
-2. Åpne **APIs & Services → Library** og aktiver **Google Calendar API**.
+2. Åpne **APIs & Services → Library** og aktiver **Google Calendar API** og **Google Drive API**.
 3. Åpne **OAuth consent screen**:
    - Brukertype: External. Legg inn appnavn og e-posten din.
-   - Under Scopes legger du til `.../auth/calendar.events` og `.../auth/calendar.readonly`.
+   - Under Scopes legger du til `.../auth/calendar.events`, `.../auth/calendar.readonly` og `.../auth/drive.readonly`.
    - Under Test users legger du til Google-kontoen din.
-   - **Viktig:** Refresh tokens for apper i status «Testing» utløper etter 7 dager. Trykk **Publish app** (til «In production»). For personlig bruk trenger du ikke verifisering; du får bare en advarsel om «ubekreftet app» når du logger inn.
+   - **Viktig:** Refresh tokens for apper i status «Testing» utløper etter 7 dager. Trykk **Publish app** (til «In production»). For personlig bruk trenger du ikke verifisering; du får bare en advarsel om «ubekreftet app» når du logger inn. Trykk «Avansert → Gå til familiebot».
 4. Åpne **Credentials → Create credentials → OAuth client ID**, velg type **Desktop app**, og noter **Client ID** og **Client secret**.
 5. Hent refresh token:
    ```bash
@@ -112,6 +116,22 @@ Botten bruker bare to scopes: **`calendar.events`** og **`calendar.readonly`**.
    ```
    Åpne lenken som skrives ut, logg inn med kontoen som eier kalenderen og godkjenn. Refresh tokenet skrives ut i terminalen.
 6. Kalender-ID-en står allerede i `wrangler.toml` (`GOOGLE_CALENDAR_ID`). Du finner den under Google Kalender → Innstillinger for kalenderen → «Integrer kalender».
+
+### 3b. Google Drive-mappe for ukeplaner
+
+1. Opprett en mappe i Google Drive, f.eks. **«Ukeplaner»**. Den må ligge på samme Google-konto som du ga tilgang til i steg 3.
+2. Åpne mappen. ID-en er den siste delen av adressen: `https://drive.google.com/drive/folders/`**`1AbCdEf...`**
+3. Lim ID-en inn i `wrangler.toml`:
+   ```toml
+   DRIVE_FOLDER_ID = "1AbCdEf..."
+   ```
+   ID-en er ikke hemmelig. Den gir ikke tilgang uten innlogging.
+4. Hvert 5. minutt ser botten etter nye PDF-er og bilder (jpg/png) i mappen:
+   - Når den finner en ny fil, sender den «📁 Ny fil i Drive: …» i Telegram, og etterpå samme oppsummering med [OK] [Rett] [Avbryt] som for Telegram-PDF-er.
+   - Filnavnet sendes med til Claude. «Ukeplan 2C uke 40.pdf» gjør det lettere å finne riktig barn og uke.
+   - Hver fil behandles én gang. Laster du opp en ny versjon med samme navn, eller erstatter filen, behandles den på nytt, og kvitteringen viser hva som er endret.
+   - Første gang ser botten bare på filer fra det siste døgnet, ikke hele mappen.
+   - Filene blir liggende i mappen. Botten flytter eller sletter ingenting der.
 
 ### 4. Opprett KV og kø
 
@@ -208,6 +228,7 @@ npm run typecheck
 | `mode` | Venter på oppfølgingssvar eller rettelse |
 | `google:access_token` | Cachet access token |
 | `seen:<update_id>` | Hindrer at samme oppdatering behandles to ganger |
+| `drive:cursor`, `drive:done:<fil-id>` | Hvor langt Drive-mappen er sjekket, og hvilke filer (og versjoner) som er behandlet |
 
 ## Sikkerhet
 
@@ -219,7 +240,8 @@ npm run typecheck
 
 ## Claude
 
-- Modellen er `claude-opus-5-5` med `effort: medium`. Du kan bytte til `claude-sonnet-5-5` i `wrangler.toml` for lavere kostnad.
+- Modellen er `claude-sonnet-5-5` med `effort: medium`. Gir uttrekket fra ukeplanene for dårlig kvalitet, kan du bytte til `claude-opus-5-5` eller sette `CLAUDE_EFFORT = "high"`.
+- PDF-er og bilder lastes opp via Claudes Files API i stedet for å base64-kodes i Workeren. Det sparer CPU-tid. Filene slettes automatisk hos Anthropic etter en time.
 - Botten bruker structured outputs (`output_config.format`) via Anthropic-SDK-et, slik at svaret alltid følger JSON-skjemaet. Deretter valideres det strengt med zod (datoer, klokkeslett, uke, confidence).
 - Server-side fallback (`fallbacks: "default"`) er slått på. Hvis sikkerhetsfilteret til modellen avviser en forespørsel, kjøres den automatisk på nytt på en annen modell.
 - Botten bygger en datotabell og legger den i prompten: i dag, i morgen, «fredag» og «neste fredag» i Europe/Oslo. Da trenger ikke modellen regne ut datoene selv.
@@ -235,8 +257,24 @@ Skjemaet følger spesifikasjonen, med to tillegg per punkt:
 
 `date` kan være `null` når datoen mangler. Da stiller botten ett oppfølgingsspørsmål i stedet for å gjette.
 
+## Workers Free
+
+Botten er laget for å holde seg innenfor gratisplanen:
+
+| Grense (Free) | Hvordan botten holder seg under |
+|---|---|
+| 100 000 kall per døgn | Webhook og cron bruker noen hundre per døgn |
+| 10 ms CPU per kall | Ventetid på Claude, Google og Telegram teller ikke. PDF-er sendes via Files API uten base64-koding. |
+| 50 utgående kall per kjøring | Eksisterende hendelser hentes i **ett** kall før en ukeplan skrives. En ukeplan på 10 punkter bruker rundt 15–20 kall. |
+| KV: 1000 skriv per døgn | Drive-sjekken hvert 5. minutt skriver bare når det finnes en ny fil. Access token caches i en time. |
+| Queues: 10 000 operasjoner per døgn | Noen få per melding |
+| Cron triggers: 5 per konto | Botten bruker 2 |
+
+Går du over CPU-grensen en sjelden gang, avbryter Cloudflare kallet, og botten svarer «Noe gikk galt». Skjer det ofte med store PDF-er, kan du gå over til Workers Paid (5 USD per måned).
+
 ## Kjente begrensninger
 
 - **KV er eventually consistent:** Endringer kan bruke opptil ett minutt på å nå andre lokasjoner. All tilstand leses og skrives fra køen, med én jobb om gangen (`max_concurrency = 1`), så i praksis er dette ikke et problem for én bruker.
-- **Workers Free-planen** har 10 ms CPU per kall. Base64-koding av store PDF-er kan gå over grensen, og da anbefales Workers Paid. Ventetid på Claude teller ikke som CPU.
+- **Ukeplaner med veldig mange punkter** (over ~35 kalenderhendelser på én gang) kan gå over grensen på 50 utgående kall i Workers Free.
+- **Drive:** Filer oppdages innen ~5 minutter. Google-dokumenter (Docs-format) støttes ikke, bare PDF og bilder.
 - **Filstørrelse:** Telegram lar boter laste ned filer på maks 20 MB.

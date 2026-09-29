@@ -142,6 +142,19 @@ export class Store {
     await this.kv.delete(`undo:${token}`);
   }
 
+  getDriveCursor() {
+    return this.kv.get("drive:cursor");
+  }
+  async setDriveCursor(iso: string) {
+    await this.kv.put("drive:cursor", iso);
+  }
+  getDriveDone(fileId: string) {
+    return this.kv.get(`drive:done:${fileId}`);
+  }
+  async setDriveDone(fileId: string, version: string) {
+    await this.kv.put(`drive:done:${fileId}`, version, { expirationTtl: 180 * DAY });
+  }
+
   async markOnce(key: string, ttl: number): Promise<boolean> {
     if (await this.kv.get(`once:${key}`)) return false;
     await this.kv.put(`once:${key}`, "1", { expirationTtl: ttl });

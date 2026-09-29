@@ -2,7 +2,9 @@ import type { Deps } from "../deps";
 import type { Extraction } from "../schema";
 import type { EntryRef, WeekplanRecord } from "../store";
 import { newId } from "../store";
-import { eventDate, planEvents, titleFor, itemChild, resolveChild } from "../mapping";
+import { eventDate, planEvents, titleFor, itemChild, resolveChild, type PlannedEvent } from "../mapping";
+import { addDays, zonedRfc3339 } from "../dates";
+import type { CalendarEvent } from "../calendar";
 import { missingCritical } from "../schema";
 import { normalizeTitle } from "../key";
 import type { Receipt } from "../summary";
@@ -24,6 +26,9 @@ export async function commitExtraction(deps: Deps, extraction: Extraction): Prom
   const receipt: Receipt = { created: [], updated: [], unchanged: [], skipped: [], removedFromPlan: [], moved: [] };
   const written: EntryRef[] = [];
 
+  // Planlegg alt først, så vi kan hente eksisterende hendelser i ett kall.
+  // Workers Free tillater bare 50 utgående kall per kjøring.
+  const plans: { item: Extraction["items"][number]; child: string | null; planned: PlannedEvent[] }[] = [];
   for (const item of extraction.items) {
     const child = itemChild(item, extraction, config);
     const title = titleFor(child, item.title);
@@ -37,13 +42,20 @@ export async function commitExtraction(deps: Deps, extraction: Extraction): Prom
       continue;
     }
     const planned = await planEvents(item, extraction, config);
+    if (planned.length) plans.push({ item, child, planned });
+  }
+
+  const existing = await preloadExisting(deps, plans.flatMap((p) => p.planned));
+  const lookup = (key: string) => (existing ? (existing.get(key) ?? null) : undefined);
+
+  for (const { item, child, planned } of plans) {
     const [main, ...companions] = planned;
     if (!main) continue;
-    const mainRes = await calendar.upsert(main.body);
+    const mainRes = await calendar.upsert(main.body, lookup(main.agentKey));
     const companionIds: string[] = [];
-    for (const c of companions) companionIds.push((await calendar.upsert(c.body)).event.id);
+    for (const c of companions) companionIds.push((await calendar.upsert(c.body, lookup(c.agentKey))).event.id);
 
-    const line = { title, date: eventDate(item), link: mainRes.event.htmlLink };
+    const line = { title: titleFor(child, item.title), date: eventDate(item), link: mainRes.event.htmlLink };
     if (mainRes.action === "created") receipt.created.push(line);
     else if (mainRes.action === "updated") receipt.updated.push(line);
     else receipt.unchanged.push(line);
@@ -142,4 +154,24 @@ export async function commitExtraction(deps: Deps, extraction: Extraction): Prom
     agentKeys: written.map((w) => w.agentKey),
   });
   return { receipt, written, removalToken };
+}
+
+/**
+ * Henter alle bot-hendelser i datoområdet i ett kall. Returnerer undefined
+ * når det ikke lønner seg (ett punkt), og upsert slår da opp selv.
+ */
+async function preloadExisting(deps: Deps, planned: PlannedEvent[]): Promise<Map<string, CalendarEvent> | undefined> {
+  if (planned.length < 2) return undefined;
+  const dates = planned.map((p) => p.body.start.date ?? p.body.start.dateTime!.slice(0, 10)).sort();
+  const tz = deps.config.timezone;
+  const events = await deps.calendar.listAgentEvents(
+    zonedRfc3339(addDays(dates[0]!, -1), "00:00", tz),
+    zonedRfc3339(addDays(dates[dates.length - 1]!, 2), "00:00", tz),
+  );
+  const map = new Map<string, CalendarEvent>();
+  for (const ev of events) {
+    const key = ev.extendedProperties?.private?.agentKey;
+    if (key) map.set(key, ev);
+  }
+  return map;
 }

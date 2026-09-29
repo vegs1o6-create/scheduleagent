@@ -1,4 +1,5 @@
-import type { GoogleEventBody } from "./mapping";
+import { AGENT_TAG, type GoogleEventBody } from "./mapping";
+import type { GoogleAuth } from "./google-auth";
 import { log } from "./log";
 
 export interface CalendarEvent {
@@ -20,25 +21,18 @@ export interface UpsertResult {
 /** Grensesnittet resten av koden bruker (gjør testing enkelt). */
 export interface CalendarApi {
   findByAgentKey(agentKey: string): Promise<CalendarEvent | null>;
-  upsert(body: GoogleEventBody): Promise<UpsertResult>;
+  /** Alle hendelser boten har laget i et tidsrom (ett kall i stedet for ett per punkt). */
+  listAgentEvents(timeMin: string, timeMax: string): Promise<CalendarEvent[]>;
+  /**
+   * Oppretter eller oppdaterer via agentKey. `existing` kan sendes inn fra en
+   * forhåndslasting (null = vet at den ikke finnes) for å spare API-kall.
+   */
+  upsert(body: GoogleEventBody, existing?: CalendarEvent | null): Promise<UpsertResult>;
   patch(eventId: string, body: GoogleEventBody): Promise<CalendarEvent>;
   get(eventId: string): Promise<CalendarEvent | null>;
   delete(eventId: string): Promise<void>;
   list(timeMin: string, timeMax: string): Promise<CalendarEvent[]>;
 }
-
-interface TokenCache {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
-}
-
-export interface GoogleCredentials {
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-}
-
-const TOKEN_CACHE_KEY = "google:access_token";
 
 /**
  * Google Calendar via REST + OAuth refresh token.
@@ -47,51 +41,19 @@ const TOKEN_CACHE_KEY = "google:access_token";
 export class GoogleCalendar implements CalendarApi {
   constructor(
     private readonly calendarId: string,
-    private readonly creds: GoogleCredentials,
-    private readonly cache: TokenCache,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly auth: GoogleAuth,
   ) {}
-
-  private async accessToken(forceRefresh = false): Promise<string> {
-    if (!forceRefresh) {
-      const cached = await this.cache.get(TOKEN_CACHE_KEY);
-      if (cached) return cached;
-    }
-    const res = await this.fetchImpl("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: this.creds.clientId,
-        client_secret: this.creds.clientSecret,
-        refresh_token: this.creds.refreshToken,
-      }),
-    });
-    if (!res.ok) {
-      log("google_token_error", { status: res.status });
-      throw new Error(`Google OAuth feilet (${res.status}). Sjekk GOOGLE_REFRESH_TOKEN.`);
-    }
-    const json = (await res.json()) as { access_token: string; expires_in: number };
-    const ttl = Math.max(60, (json.expires_in ?? 3600) - 120);
-    await this.cache.put(TOKEN_CACHE_KEY, json.access_token, { expirationTtl: ttl });
-    return json.access_token;
-  }
 
   private base(): string {
     return `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(this.calendarId)}/events`;
   }
 
-  private async request<T>(method: string, url: string, body?: unknown, retried = false): Promise<T> {
-    const token = await this.accessToken(retried);
-    const res = await this.fetchImpl(url, {
+  private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
+    const res = await this.auth.fetch(url, {
       method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        ...(body ? { "content-type": "application/json" } : {}),
-      },
+      headers: body ? { "content-type": "application/json" } : {},
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 401 && !retried) return this.request<T>(method, url, body, true);
     if (method === "DELETE" && (res.status === 204 || res.status === 410 || res.status === 404)) {
       return undefined as T;
     }
@@ -101,6 +63,19 @@ export class GoogleCalendar implements CalendarApi {
       throw new Error(`Google Calendar ${method} feilet (${res.status})`);
     }
     return (await res.json()) as T;
+  }
+
+  async listAgentEvents(timeMin: string, timeMax: string): Promise<CalendarEvent[]> {
+    const params = new URLSearchParams({
+      privateExtendedProperty: `agent=${AGENT_TAG}`,
+      timeMin,
+      timeMax,
+      singleEvents: "true",
+      maxResults: "250",
+    });
+    const res = await this.request<{ items?: CalendarEvent[] }>("GET", `${this.base()}?${params}`);
+    log("calendar_preloaded", { count: res.items?.length ?? 0, timeMin, timeMax });
+    return res.items ?? [];
   }
 
   async findByAgentKey(agentKey: string): Promise<CalendarEvent | null> {
@@ -125,9 +100,9 @@ export class GoogleCalendar implements CalendarApi {
     }
   }
 
-  async upsert(body: GoogleEventBody): Promise<UpsertResult> {
+  async upsert(body: GoogleEventBody, known?: CalendarEvent | null): Promise<UpsertResult> {
     const key = body.extendedProperties.private.agentKey!;
-    const existing = await this.findByAgentKey(key);
+    const existing = known === undefined ? await this.findByAgentKey(key) : known;
     if (existing) {
       if (sameContent(existing, body)) {
         log("calendar_unchanged", { eventId: existing.id, agentKey: key });

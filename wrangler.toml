@@ -25,15 +25,17 @@ max_batch_timeout = 1
 max_concurrency = 1
 max_retries = 0
 
-# Søndag kl. 18:00 Europe/Oslo. Cron kjører i UTC, så vi trigger både 16:00
-# og 17:00 UTC og sjekker lokal tid i koden (håndterer sommertid).
+# 1) Hvert 5. minutt: se etter nye ukeplaner i Google Drive-mappen.
+# 2) Søndag kl. 18:00 Europe/Oslo. Cron kjører i UTC, så vi trigger både 16:00
+#    og 17:00 UTC og sjekker lokal tid i koden (håndterer sommertid).
+# Uttrykkene må stemme med CRON_DRIVE_POLL / CRON_SUNDAY i src/index.ts.
 [triggers]
-crons = ["0 16,17 * * SUN"]
+crons = ["*/5 * * * *", "0 16,17 * * SUN"]
 
 [vars]
 TIMEZONE = "Europe/Oslo"
 GOOGLE_CALENDAR_ID = "499d12834b64c2295b7cb8cbc7a44dfcce198b9552f204263cd5cf42418a637c@group.calendar.google.com"
-CLAUDE_MODEL = "claude-opus-5-5"
+CLAUDE_MODEL = "claude-sonnet-5-5"
 CLAUDE_EFFORT = "medium"
 REQUIRE_APPROVAL_FOR_TEXT = "false"
 AUTO_APPROVE = "false"
@@ -43,3 +45,6 @@ BOTH_COLOR_ID = "5"
 DEFAULT_EVENT_MINUTES = "60"
 EVENT_REMINDER_MINUTES = "60"
 LOW_CONFIDENCE = "0.7"
+# Google Drive-mappen som overvåkes (ID-en fra URL-en drive.google.com/drive/folders/<ID>).
+# Tom = Drive-inngangen er av.
+DRIVE_FOLDER_ID = ""
