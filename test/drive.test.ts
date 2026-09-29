@@ -55,12 +55,12 @@ describe("Google Drive-mappe", () => {
     claude.extractions.push(UKEPLAN_SVERRE);
     await handleDriveFile(deps, file("f1", "2026-09-29T09:30:00.000Z", "x", "Ukeplan 2C uke 40.pdf"));
     expect(drive.downloads).toEqual(["f1"]);
-    expect(telegram.sent[0]!.text).toContain("Ny fil i Drive: <b>Ukeplan 2C uke 40.pdf</b>");
+    expect(telegram.originalTexts[0]).toContain("Ny fil i Drive: <b>Ukeplan 2C uke 40.pdf</b>");
     expect(telegram.buttons().map((b) => b.split(":")[0])).toEqual(["ok", "fix", "no"]);
     expect(calendar.events.size).toBe(0);
 
     await processJob(deps, { kind: "telegram_update", update: callbackUpdate(telegram.buttons()[0]!) });
-    expect(calendar.events.size).toBe(6);
+    expect(calendar.events.size).toBe(5);
   });
 
   it("feil i Drive-jobben rapporteres i Telegram", async () => {
@@ -84,8 +84,8 @@ describe("Workers Free: utgående kall", () => {
     await handleDriveFile(deps, file("f1", "2026-09-29T09:30:00.000Z"));
     calendar.calls = 0;
     await processJob(deps, { kind: "telegram_update", update: callbackUpdate(telegram.buttons()[0]!) });
-    // 1 forhåndslasting + 6 skriv (5 punkter + 07:30-fristen)
-    expect(calendar.calls).toBe(7);
+    // 1 forhåndslasting + 5 skriv
+    expect(calendar.calls).toBe(6);
   });
 });
 

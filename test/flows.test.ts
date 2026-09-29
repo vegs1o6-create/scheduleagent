@@ -8,6 +8,12 @@ import { UKEPLAN_ASTRID, UKEPLAN_SVERRE, UKEPLAN_SVERRE_REVIDERT } from "./fixtu
 
 const run = (deps: ReturnType<typeof makeDeps>["deps"], u: unknown) => processUpdate(deps, u as TgUpdate);
 
+function lastReceipt(telegram: { sent: { text: string; keyboard?: unknown }[] }) {
+  const r = [...telegram.sent].reverse().find((m) => m.text.includes("Lagret i kalenderen"));
+  if (!r) throw new Error("fant ingen kvittering");
+  return r as Parameters<ReturnType<typeof makeDeps>["telegram"]["buttons"]>[0] & { text: string };
+}
+
 function draftIdFrom(buttons: string[]): string {
   const ok = buttons.find((b) => b.startsWith("ok:"));
   if (!ok) throw new Error("fant ingen OK-knapp");
@@ -25,8 +31,11 @@ describe("inngang 1: tekst", () => {
     expect(ev.summary).toBe("Sverre: Fotball");
     expect(ev.start.dateTime).toBe("2026-10-01T17:00:00+02:00");
     expect(ev.end.dateTime).toBe("2026-10-01T18:30:00+02:00");
-    expect(telegram.last().text).toContain("✅");
-    expect(telegram.last().text).toContain(ev.htmlLink);
+    const receipt = telegram.sent.find((m) => m.text.includes(ev.htmlLink))!;
+    expect(receipt.text).toContain("✅");
+    // Ingen varsler som standard – botten spør etterpå
+    expect(ev.body.reminders).toEqual({ useDefault: false, overrides: [] });
+    expect(telegram.last().text).toContain("Vil du ha varsel");
     // Datokonteksten sendes med
     expect(claude.textCalls[0]!.ctx.dateContext).toContain("2026-09-29");
   });
@@ -103,9 +112,9 @@ describe("inngang 2: ukeplan (PDF)", () => {
     await run(deps, documentUpdate());
     await run(deps, callbackUpdate(`ok:${draftIdFrom(telegram.buttons())}`));
 
-    // 5 kalenderpunkter + 1 ekstra 07:30-påminnelse for fristen
-    expect(calendar.events.size).toBe(6);
-    const receipt = telegram.last().text;
+    // 5 kalenderpunkter (ingen 07:30-hendelse når varsel ikke er valgt)
+    expect(calendar.events.size).toBe(5);
+    const receipt = lastReceipt(telegram).text;
     expect(receipt).toContain("Opprettet (5)");
     expect(receipt).toContain("Hoppet over (1)");
     expect(receipt).toContain("info, ikke kalender");
@@ -118,7 +127,7 @@ describe("inngang 2: ukeplan (PDF)", () => {
     const id = draftIdFrom(telegram.buttons());
     await run(deps, callbackUpdate(`ok:${id}`));
     await run(deps, callbackUpdate(`ok:${id}`));
-    expect(calendar.events.size).toBe(6);
+    expect(calendar.events.size).toBe(5);
     expect(telegram.last().text).toContain("allerede behandlet");
   });
 
@@ -161,11 +170,11 @@ describe("inngang 2: ukeplan (PDF)", () => {
     claude.extractions.push(UKEPLAN_SVERRE, UKEPLAN_SVERRE_REVIDERT);
     await run(deps, documentUpdate());
     await run(deps, callbackUpdate(`ok:${draftIdFrom(telegram.buttons())}`));
-    expect(calendar.events.size).toBe(6);
+    expect(calendar.events.size).toBe(5);
 
     await run(deps, documentUpdate());
     await run(deps, callbackUpdate(`ok:${draftIdFrom(telegram.buttons())}`));
-    const receipt = telegram.last();
+    const receipt = lastReceipt(telegram);
     expect(receipt.text).toContain("erstatter en tidligere versjon");
     expect(receipt.text).toContain("Flyttet/endret dato (1)");
     expect(receipt.text).toContain("Ikke lenger med i ukeplanen (2)");
@@ -173,13 +182,13 @@ describe("inngang 2: ukeplan (PDF)", () => {
     expect(receipt.text).not.toContain("Opprettet");
     // Ingenting slettes automatisk: gamle tur + bibliotek ligger fortsatt der
     expect(calendar.deleted).toEqual([]);
-    expect(calendar.events.size).toBe(7);
+    expect(calendar.events.size).toBe(6);
 
     // Sletting krever eksplisitt knappetrykk
     const del = telegram.buttons(receipt).find((b) => b.startsWith("undo:"))!;
     await run(deps, callbackUpdate(del));
     expect(calendar.deleted).toHaveLength(2);
-    expect(calendar.events.size).toBe(5);
+    expect(calendar.events.size).toBe(4);
   });
 });
 

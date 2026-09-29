@@ -8,6 +8,7 @@ import { eventDate, planEvents, titleFor } from "../mapping";
 import { escapeHtml as e } from "../telegram";
 import { formatSummary } from "../summary";
 import { draftKeyboard, presentDraft } from "./drafts";
+import { askForReminders } from "./reminders";
 import { commitExtraction } from "./commit";
 import { log } from "../log";
 
@@ -121,6 +122,7 @@ export async function handleText(deps: Deps, msg: TgMessage): Promise<void> {
   const receiptId = await telegram.sendMessage(deps.chatId, lines.join("\n"), undefined, msg.message_id);
   await store.linkMessage(receiptId, written);
   await store.linkMessage(msg.message_id, written);
+  await askForReminders(deps, written, extraction);
 }
 
 /** "nei, kl. 09": oppdaterer eksisterende hendelse i stedet for å lage en ny. */
@@ -138,15 +140,17 @@ async function applyEntryCorrection(
     child: extraction.child ?? target.child,
     items: [{ ...item, child: item.child ?? target.child }],
   };
-  const planned = await planEvents(fixed.items[0]!, fixed, config);
-  const [main, ...companions] = planned;
-  if (!main) {
-    await telegram.sendMessage(deps.chatId, "Rettelsen manglet dato, så jeg endret ingenting.");
-    return;
-  }
   const existing = await calendar.get(target.eventId);
   if (!existing) {
     await telegram.sendMessage(deps.chatId, "Fant ikke den forrige hendelsen i kalenderen lenger. Send den på nytt.");
+    return;
+  }
+  // Behold varsel hvis brukeren har valgt det for denne oppføringen.
+  const withReminders = target.reminder === true || existing.extendedProperties?.private?.reminder === "on";
+  const planned = await planEvents(fixed.items[0]!, fixed, config, { withReminders });
+  const [main, ...companions] = planned;
+  if (!main) {
+    await telegram.sendMessage(deps.chatId, "Rettelsen manglet dato, så jeg endret ingenting.");
     return;
   }
   const event = await calendar.patch(target.eventId, main.body);
@@ -169,6 +173,7 @@ async function applyEntryCorrection(
     child: main.child,
     item: main.item,
     companionIds: [...companionIds, ...leftover],
+    reminder: withReminders,
   };
   const history = await store.getHistory();
   const group = history[0]?.map((x) => (x.eventId === target.eventId ? updated : x));

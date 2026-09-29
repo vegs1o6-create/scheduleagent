@@ -90,17 +90,34 @@ function minutesBefore(
 /**
  * Oversetter et punkt til én eller flere Google-hendelser, etter reglene:
  * - event med tid: vanlig hendelse, ellers heldag
- * - deadline: heldag på fristdato, varsel 2 dager før kl 18:00, pluss en
- *   kort "frist i dag"-hendelse kl 07:30 samme dag (Google tillater ikke
- *   varsler etter starten på en heldagshendelse)
- * - reminder / bring: popup kvelden før kl 19:00
+ * - deadline: heldag på fristdato
  * - info: ingenting
+ *
+ * Som standard lages ingen varsler. Med `withReminders`:
+ * - deadline: varsel 2 dager før kl 18:00, pluss en kort "frist i dag"-
+ *   hendelse kl 07:30 samme dag (Google tillater ikke varsler etter
+ *   starten på en heldagshendelse)
+ * - reminder / bring / heldag: popup kvelden før kl 19:00
+ * - avtale med klokkeslett: popup EVENT_REMINDER_MINUTES før
  */
-export async function planEvents(item: Item, extraction: Extraction, config: Config): Promise<PlannedEvent[]> {
+export interface PlanOptions {
+  /** Legg på popup-varsler (standard: av, brukeren velger etter uttrekket). */
+  withReminders?: boolean;
+}
+
+const NO_REMINDERS: GoogleEventBody["reminders"] = { useDefault: false, overrides: [] };
+
+export async function planEvents(
+  item: Item,
+  extraction: Extraction,
+  config: Config,
+  options: PlanOptions = {},
+): Promise<PlannedEvent[]> {
   if (item.type === "info") return [];
   const date = eventDate(item);
   if (!date) return [];
 
+  const withReminders = options.withReminders ?? false;
   const tz = config.timezone;
   const child = itemChild(item, extraction, config);
   const key = await agentKey(child, date, item.title);
@@ -112,7 +129,14 @@ export async function planEvents(item: Item, extraction: Extraction, config: Con
     ...(colorId ? { colorId } : {}),
   };
   const props = (k: string, extra: Record<string, string> = {}) => ({
-    private: { agentKey: k, agent: AGENT_TAG, type: item.type, ...(child ? { child } : {}), ...extra },
+    private: {
+      agentKey: k,
+      agent: AGENT_TAG,
+      type: item.type,
+      reminder: withReminders ? "on" : "off",
+      ...(child ? { child } : {}),
+      ...extra,
+    },
   });
 
   if (item.type === "deadline") {
@@ -120,25 +144,32 @@ export async function planEvents(item: Item, extraction: Extraction, config: Con
       ...base,
       start: { date },
       end: { date: addDays(date, 1) },
-      reminders: {
-        useDefault: false,
-        overrides: [{ method: "popup", minutes: minutesBefore(date, "00:00", addDays(date, -2), "18:00", tz) }],
-      },
+      reminders: withReminders
+        ? {
+            useDefault: false,
+            overrides: [{ method: "popup", minutes: minutesBefore(date, "00:00", addDays(date, -2), "18:00", tz) }],
+          }
+        : NO_REMINDERS,
       extendedProperties: props(key),
     };
-    const morningKey = `${key}-am`;
-    const morning: GoogleEventBody = {
-      ...base,
-      summary: `⏰ Frist i dag – ${titleFor(child, item.title)}`,
-      start: { dateTime: zonedRfc3339(date, "07:30", tz), timeZone: tz },
-      end: { dateTime: zonedRfc3339(date, "07:45", tz), timeZone: tz },
-      reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 0 }] },
-      extendedProperties: props(morningKey, { companionOf: key }),
-    };
-    return [
-      { agentKey: key, item, child, body: main },
-      { agentKey: morningKey, item, child, body: morning },
-    ];
+    const planned: PlannedEvent[] = [{ agentKey: key, item, child, body: main }];
+    if (withReminders) {
+      const morningKey = `${key}-am`;
+      planned.push({
+        agentKey: morningKey,
+        item,
+        child,
+        body: {
+          ...base,
+          summary: `⏰ Frist i dag – ${titleFor(child, item.title)}`,
+          start: { dateTime: zonedRfc3339(date, "07:30", tz), timeZone: tz },
+          end: { dateTime: zonedRfc3339(date, "07:45", tz), timeZone: tz },
+          reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 0 }] },
+          extendedProperties: props(morningKey, { companionOf: key }),
+        },
+      });
+    }
+    return planned;
   }
 
   const eveningBefore = item.type === "reminder" || item.bring.length > 0;
@@ -162,17 +193,25 @@ export async function planEvents(item: Item, extraction: Extraction, config: Con
   } else {
     start = { date };
     end = { date: addDays(date, 1) };
-    if (eveningBefore) {
-      overrides.push({ method: "popup", minutes: minutesBefore(date, "00:00", addDays(date, -1), "19:00", tz) });
-    }
+    // Heldag: kvelden før kl 19 (også for vanlige heldagshendelser når varsel er valgt).
+    overrides.push({ method: "popup", minutes: minutesBefore(date, "00:00", addDays(date, -1), "19:00", tz) });
   }
 
   const body: GoogleEventBody = {
     ...base,
     start,
     end,
-    reminders: overrides.length ? { useDefault: false, overrides } : { useDefault: true },
+    reminders: withReminders ? { useDefault: false, overrides } : NO_REMINDERS,
     extendedProperties: props(key),
   };
   return [{ agentKey: key, item, child, body }];
+}
+
+/** Kort beskrivelse av standardvarselet for et punkt (vises i spørsmålet). */
+export function reminderLabel(item: Item): string {
+  if (item.type === "deadline") return "2 dager før kl. 18 + samme dag kl. 07:30";
+  if (item.start_time) {
+    return item.type === "reminder" || item.bring.length > 0 ? "kvelden før kl. 19 + 1 t før" : "1 t før";
+  }
+  return "kvelden før kl. 19";
 }

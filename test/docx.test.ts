@@ -91,6 +91,6 @@ describe("Word-ukeplan inn i botten", () => {
     await handleDriveFile(deps, { id: "w1", name: "Ukeplan.docx", mimeType: DOCX_MIME, ...base });
     await handleDriveFile(deps, { id: "g1", name: "Ukeplan (Google Docs)", mimeType: "application/vnd.google-apps.document", ...base });
     expect(claude.textDocuments).toHaveLength(2);
-    expect(telegram.sent.filter((m) => m.text.includes("Ny fil i Drive"))).toHaveLength(2);
+    expect(telegram.originalTexts.filter((t) => t.includes("Ny fil i Drive"))).toHaveLength(2);
   });
 });

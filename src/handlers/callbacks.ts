@@ -4,18 +4,25 @@ import { escapeHtml as e } from "../telegram";
 import { approveExtraction } from "./drafts";
 import { titleFor } from "../mapping";
 import { log } from "../log";
+import { handleReminderCallback } from "./reminders";
 
 /**
  * Knappetrykk. Formatet er "<handling>:<id>":
  *  ok/fix/no  – godkjenn, rett eller avbryt et utkast
  *  undo/keep  – bekreft eller avvis sletting (/angre og fjernede ukeplanpunkter)
+ *  rt/ra/rn/rs – velg varsler etter at oppføringene er lagret
  */
 export async function handleCallback(deps: Deps, cb: TgCallbackQuery): Promise<void> {
   const { telegram, store } = deps;
-  const [action, id] = (cb.data ?? "").split(":");
+  const [action, id, arg] = (cb.data ?? "").split(":");
   const messageId = cb.message?.message_id;
   if (!action || !id) return;
   log("callback", { action, id });
+
+  if (action === "rt" || action === "ra" || action === "rn" || action === "rs") {
+    await handleReminderCallback(deps, action, id, arg, messageId);
+    return;
+  }
 
   if (action === "ok" || action === "fix" || action === "no") {
     const draft = await store.getDraft(id);

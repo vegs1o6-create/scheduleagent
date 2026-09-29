@@ -21,6 +21,18 @@ export interface EntryRef {
   companionIds: string[];
   /** true hvis boten opprettet hendelsen (ikke bare oppdaterte en eksisterende). */
   created: boolean;
+  /** true hvis hendelsen har varsler (valgt av brukeren). */
+  reminder?: boolean;
+}
+
+/** Spørsmålet «Vil du ha varsel på noen av oppføringene?» som venter på svar. */
+export interface ReminderPicker {
+  token: string;
+  entries: EntryRef[];
+  /** Kontekst som trengs for å bygge hendelsene på nytt med varsler. */
+  context: { source: "ukeplan" | "fritekst"; week: string | null; child: string | null };
+  selected: number[];
+  messageId?: number;
 }
 
 export type Mode =
@@ -153,6 +165,22 @@ export class Store {
   }
   async setDriveDone(fileId: string, version: string) {
     await this.kv.put(`drive:done:${fileId}`, version, { expirationTtl: 180 * DAY });
+  }
+
+  saveReminderPicker(p: ReminderPicker) {
+    return this.putJson(`remind:${p.token}`, p, 7 * DAY);
+  }
+  getReminderPicker(token: string) {
+    return this.getJson<ReminderPicker>(`remind:${token}`);
+  }
+  async clearReminderPicker(token: string) {
+    await this.kv.delete(`remind:${token}`);
+  }
+  /** Oppdaterer lagrede oppføringer (historikk) etter at varsler er lagt til. */
+  async updateHistoryEntries(updated: EntryRef[]): Promise<void> {
+    const byId = new Map(updated.map((e) => [e.eventId, e]));
+    const h = (await this.getHistory()).map((group) => group.map((e) => byId.get(e.eventId) ?? e));
+    await this.putJson("history", h);
   }
 
   async markOnce(key: string, ttl: number): Promise<boolean> {

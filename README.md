@@ -211,17 +211,35 @@ npm run typecheck
 
 | Type | I kalenderen |
 |---|---|
-| `event` med tid | Vanlig hendelse (standard 60 min) med varsel 60 min før |
+| `event` med tid | Vanlig hendelse (standard 60 min) |
 | `event` uten tid | Heldagshendelse |
-| `deadline` | Heldagshendelse på fristdatoen med varsel **2 dager før kl. 18:00**, pluss en kort hendelse «⏰ Frist i dag» **kl. 07:30** samme dag (se merknad) |
-| `reminder`, eller punkter med `bring` | Popup **kvelden før kl. 19:00**, med «ta med»-listen i beskrivelsen |
+| `deadline` | Heldagshendelse på fristdatoen |
+| `reminder` | Heldagshendelse, eller vanlig hendelse hvis den har tid, med «ta med»-listen i beskrivelsen |
 | `info` | Skrives ikke til kalenderen, men vises i oppsummeringen |
 
 - **Tittel:** «Sverre: tittel», «Astrid: tittel» eller «Begge: tittel». Farge etter barn.
 - **Beskrivelse:** hva som skal huskes, `action_required`, eventuell merknad og `source_quote`.
-- **Varsler regnes med sommertid:** kvelden før kl. 19 blir riktig også natten klokka stilles.
 
-**Merknad om fristvarsel kl. 07:30:** Google Calendar tillater bare varsler *før* starten på en hendelse. En heldagshendelse starter kl. 00:00, så den kan ikke ha et varsel kl. 07:30 samme dag. Derfor lager botten en egen, kort hendelse kl. 07:30 med varsel ved start. Den hører til fristen og følger med ved `/angre` og sletting.
+### Varsler: ingen som standard, du velger etterpå
+
+Hendelsene lages **uten** varsler. Kalenderens egne standardvarsler slås også av for dem.
+
+Etter lagring spør botten: «🔔 Vil du ha varsel på noen av disse?»
+- **Én oppføring** (typisk fritekst): du svarer ja eller nei.
+- **Flere oppføringer** (ukeplan): du krysser av for dem du vil ha varsel på, og trykker **Lagre varsler**. Det finnes også **Velg alle** og **Ingen varsler**.
+
+Velger du varsel, gjelder disse tidene:
+
+| Type | Varsel |
+|---|---|
+| `deadline` | **2 dager før kl. 18:00**, pluss en kort hendelse «⏰ Frist i dag» **kl. 07:30** samme dag (se merknad) |
+| `reminder`, punkter med `bring`, og heldagshendelser | **Kvelden før kl. 19:00** |
+| `event` med klokkeslett | **1 time før** (`EVENT_REMINDER_MINUTES`), og i tillegg kvelden før hvis noe skal tas med |
+
+- **Valgene huskes:** Et valgt varsel beholdes når du retter oppføringen («nei, kl. 09») og når samme ukeplan kommer på nytt. Botten spør ikke om igjen for oppføringer som allerede har varsel.
+- **Sommertid:** Varseltidene regnes med sommertid, så kvelden før kl. 19 blir riktig også natten klokka stilles.
+
+**Merknad om fristvarsel kl. 07:30:** Google Calendar tillater bare varsler *før* starten på en hendelse. En heldagshendelse starter kl. 00:00, så den kan ikke ha et varsel kl. 07:30 samme dag. Derfor lager botten en egen, kort hendelse kl. 07:30 med varsel ved start, men bare når du har valgt varsel. Den hører til fristen og følger med ved `/angre` og sletting.
 
 ## Idempotens og tilstand
 
@@ -239,6 +257,7 @@ npm run typecheck
 | `mode` | Venter på oppfølgingssvar eller rettelse |
 | `google:access_token` | Cachet access token |
 | `seen:<update_id>` | Hindrer at samme oppdatering behandles to ganger |
+| `remind:<token>` | Åpne spørsmål om varsler |
 | `drive:cursor`, `drive:done:<fil-id>` | Hvor langt Drive-mappen er sjekket, og hvilke filer (og versjoner) som er behandlet |
 
 ## Sikkerhet

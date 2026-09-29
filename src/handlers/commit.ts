@@ -48,10 +48,18 @@ export async function commitExtraction(deps: Deps, extraction: Extraction): Prom
   const existing = await preloadExisting(deps, plans.flatMap((p) => p.planned));
   const lookup = (key: string) => (existing ? (existing.get(key) ?? null) : undefined);
 
-  for (const { item, child, planned } of plans) {
+  for (const plan of plans) {
+    const { item, child } = plan;
+    let planned = plan.planned;
+    const first = planned[0];
+    if (!first) continue;
+    // Har brukeren tidligere valgt varsel på denne oppføringen, beholdes det.
+    const existingMain = lookup(first.agentKey) ?? (existing ? null : await calendar.findByAgentKey(first.agentKey));
+    const keepReminder = existingMain?.extendedProperties?.private?.reminder === "on";
+    if (keepReminder) planned = await planEvents(item, extraction, config, { withReminders: true });
     const [main, ...companions] = planned;
     if (!main) continue;
-    const mainRes = await calendar.upsert(main.body, lookup(main.agentKey));
+    const mainRes = await calendar.upsert(main.body, existingMain);
     const companionIds: string[] = [];
     for (const c of companions) companionIds.push((await calendar.upsert(c.body, lookup(c.agentKey))).event.id);
 
@@ -68,6 +76,7 @@ export async function commitExtraction(deps: Deps, extraction: Extraction): Prom
       item,
       companionIds,
       created: mainRes.action === "created",
+      reminder: keepReminder,
     });
   }
 

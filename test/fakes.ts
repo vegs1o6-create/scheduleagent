@@ -93,6 +93,8 @@ export interface SentMessage {
 
 export class FakeTelegram {
   sent: SentMessage[] = [];
+  /** Tekstene slik de ble sendt (før eventuelle redigeringer). */
+  originalTexts: string[] = [];
   removedKeyboards: number[] = [];
   private seq = 1000;
   file: Uint8Array = new Uint8Array([37, 80, 68, 70]); // "%PDF"
@@ -100,9 +102,18 @@ export class FakeTelegram {
   async sendMessage(_chat: string | number, text: string, keyboard?: Keyboard, replyTo?: number) {
     const id = ++this.seq;
     this.sent.push({ id, text, keyboard, replyTo });
+    this.originalTexts.push(text);
     return id;
   }
-  async editMessage() {}
+  edits: { messageId: number; text: string; keyboard?: Keyboard }[] = [];
+  async editMessage(_chat: string | number, messageId: number, text: string, keyboard?: Keyboard) {
+    this.edits.push({ messageId, text, keyboard });
+    const msg = this.sent.find((m) => m.id === messageId);
+    if (msg) {
+      msg.text = text;
+      msg.keyboard = keyboard;
+    }
+  }
   async removeKeyboard(_chat: string | number, messageId: number) {
     this.removedKeyboards.push(messageId);
   }
