@@ -169,7 +169,17 @@ npm run deploy
 
 Noter URL-en, f.eks. `https://familiebot.<ditt-subdomene>.workers.dev`.
 
-### 7. Sett webhook (med `secret_token`)
+### 7. Sett webhook (enklest: i nettleseren)
+
+Åpne denne adressen i nettleseren:
+
+```
+https://familiebot.<ditt-subdomene>.workers.dev/setup?key=<TELEGRAM_WEBHOOK_SECRET>
+```
+
+Siden setter webhooken til riktig adresse med riktig `secret_token`. Den sjekker også at alle secrets finnes, og at Telegram-boten, chat-ID-en, Google-innloggingen, kalenderen, Drive-mappen og Claude-nøkkelen virker. Hver sjekk får ✅ eller ❌ med forklaring. Siden er beskyttet med webhook-secreten og viser aldri verdiene til hemmelighetene. Du kan åpne den igjen når som helst.
+
+### 7b. Sett webhook manuelt (alternativ)
 
 ```bash
 curl -s "https://api.telegram.org/bot<TOKEN>/setWebhook" \

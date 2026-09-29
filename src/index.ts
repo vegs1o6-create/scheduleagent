@@ -8,6 +8,7 @@ import { GoogleCalendar } from "./calendar";
 import { GoogleDrive } from "./drive";
 import { ClaudeClient } from "./claude";
 import { handleWebhook } from "./webhook";
+import { handleSetup } from "./setup";
 import { processUpdate } from "./router";
 import { handleSundayReminder } from "./handlers/cron";
 import { handleDriveFile, pollDrive } from "./handlers/drive";
@@ -71,6 +72,9 @@ export default {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/telegram") {
       return handleWebhook(request, env, ctx);
+    }
+    if (request.method === "GET" && url.pathname === "/setup") {
+      return handleSetup(request, env);
     }
     if (request.method === "GET" && url.pathname === "/health") {
       return new Response("ok");

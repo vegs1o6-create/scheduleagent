@@ -97,3 +97,41 @@ describe("webhook-verifisering", () => {
     expect(timingSafeEqual("", "")).toBe(true);
   });
 });
+
+describe("oppsettside (/setup)", () => {
+  it("krever riktig nøkkel", async () => {
+    const { env, ctx } = makeEnv();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const none = await worker.fetch(new Request("https://bot.example/setup"), env, ctx);
+    const wrong = await worker.fetch(new Request("https://bot.example/setup?key=feil"), env, ctx);
+    expect(none.status).toBe(401);
+    expect(wrong.status).toBe(401);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("setter webhooken til egen adresse og viser status uten å lekke secrets", async () => {
+    const { env, ctx } = makeEnv();
+    const calls: { url: string; body?: string }[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const u = String(input);
+      calls.push({ url: u, body: init?.body as string | undefined });
+      const json = (result: unknown) => new Response(JSON.stringify({ ok: true, result }));
+      if (u.endsWith("/getMe")) return json({ username: "familie_bot" });
+      if (u.endsWith("/setWebhook")) return json(true);
+      if (u.endsWith("/getWebhookInfo")) return json({ url: "https://bot.example/telegram", pending_update_count: 0 });
+      if (u.endsWith("/getChat")) return json({ type: "private", first_name: "Vegard" });
+      return new Response("{}", { status: 400 });
+    });
+    const res = await worker.fetch(new Request(`https://bot.example/setup?key=${SECRET}`), env, ctx);
+    const text = await res.text();
+    const setWebhook = calls.find((c) => c.url.endsWith("/setWebhook"))!;
+    expect(JSON.parse(setWebhook.body!)).toMatchObject({ url: "https://bot.example/telegram", secret_token: SECRET });
+    expect(text).toContain("✅ Telegram-bot: @familie_bot");
+    expect(text).toContain("✅ Telegram-webhook: Satt til https://bot.example/telegram");
+    expect(text).toContain("❌ Secrets i Cloudflare: Mangler: ANTHROPIC_API_KEY");
+    expect(text).not.toContain(SECRET);
+    expect(text).not.toContain("123:abc");
+    fetchSpy.mockRestore();
+  });
+});
