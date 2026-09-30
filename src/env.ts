@@ -8,9 +8,12 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   TELEGRAM_ALLOWED_CHAT_ID: string;
-  ANTHROPIC_API_KEY: string;
+  /** Trengs bare når AI_PROVIDER = "anthropic". */
+  ANTHROPIC_API_KEY?: string;
   /** Valgfri: trengs bare for API-nøkler som ikke er knyttet til et workspace. */
   ANTHROPIC_WORKSPACE_ID?: string;
+  /** Trengs når AI_PROVIDER = "foundry" (standard). */
+  FOUNDRY_API_KEY?: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GOOGLE_REFRESH_TOKEN: string;
@@ -18,6 +21,10 @@ export interface Env {
   // Vars (wrangler.toml)
   TIMEZONE?: string;
   GOOGLE_CALENDAR_ID: string;
+  AI_PROVIDER?: string;
+  FOUNDRY_ENDPOINT?: string;
+  FOUNDRY_DEPLOYMENT?: string;
+  FOUNDRY_REASONING_EFFORT?: string;
   CLAUDE_MODEL?: string;
   CLAUDE_EFFORT?: string;
   REQUIRE_APPROVAL_FOR_TEXT?: string;
@@ -41,6 +48,13 @@ const ChildConfigSchema = z.object({
   aliases: z.array(z.string()).default([]),
 });
 export type ChildConfig = z.infer<typeof ChildConfigSchema>;
+
+export type AiProvider = "foundry" | "anthropic";
+
+/** Hvilken modell-leverandør som brukes. Standard er Microsoft Foundry. */
+export function aiProvider(env: Pick<Env, "AI_PROVIDER">): AiProvider {
+  return env.AI_PROVIDER?.trim().toLowerCase() === "anthropic" ? "anthropic" : "foundry";
+}
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 

@@ -1,6 +1,6 @@
 # Familiebot 👨‍👩‍👧‍👦
 
-En Telegram-bot som håndterer familiens kalender og påminnelser. Den tar imot ukeplaner (PDF/bilde) og fritekst, trekker ut det viktige med Claude API, og skriver til Google Kalender. Botten kjører som en Cloudflare Worker (TypeScript) med KV, Queues og Cron Trigger.
+En Telegram-bot som håndterer familiens kalender og påminnelser. Den tar imot ukeplaner (PDF/bilde) og fritekst, trekker ut det viktige med en språkmodell (standard: OpenAI-modell i Microsoft Foundry, alternativt Claude API), og skriver til Google Kalender. Botten kjører som en Cloudflare Worker (TypeScript) med KV, Queues og Cron Trigger.
 
 - **Fritekst:** «Sverre har fotball torsdag kl 17» havner rett i kalenderen, og du får en kvittering med lenke. Rettelser som «nei, kl. 09» oppdaterer siste oppføring.
 - **Ukeplan:** Du sender PDF, Word (.docx) eller bilde i Telegram, **eller legger filen i en Google Drive-mappe** (der fungerer også Google Docs). Du får en oppsummering med knappene **[OK] [Rett] [Avbryt]**, og ingenting skrives før du trykker OK.
@@ -16,7 +16,7 @@ Telegram ──webhook──▶ Worker (fetch)
                        │ 3. legg oppdateringen i køen, svar 200 umiddelbart
                        ▼
                     Cloudflare Queue ──▶ Worker (queue)
-                                           ├─ Claude API (tekst / PDF / bilde → JSON, validert med zod)
+                                           ├─ Microsoft Foundry / Claude API (tekst / PDF / bilde → JSON, validert med zod)
                                            ├─ Google Calendar API (upsert via agentKey)
                                            ├─ KV (utkast, siste oppføringer, ukeplanhistorikk, token-cache)
                                            └─ Telegram (oppsummering, knapper, kvitteringer)
@@ -24,7 +24,7 @@ Cron (hvert 5. min) ───▶ Worker (scheduled) ──▶ nye filer i Drive-
 Cron (søn 16/17 UTC) ──▶ Worker (scheduled) ──▶ påminnelse kl. 18 Oslo-tid
 ```
 
-Alt arbeid mot Claude skjer i køen. PDF-analyse kan ta lenger enn de 30 sekundene `waitUntil` gir. En kø-consumer kan kjøre i opptil 15 minutter.
+Alt arbeid mot modellen skjer i køen. PDF-analyse kan ta lenger enn de 30 sekundene `waitUntil` gir. En kø-consumer kan kjøre i opptil 15 minutter.
 
 ### Filer
 
@@ -34,7 +34,8 @@ Alt arbeid mot Claude skjer i køen. PDF-analyse kan ta lenger enn de 30 sekunde
 | `src/webhook.ts` | Verifisering av secret, chat-ID-lås, legging i kø |
 | `src/router.ts` | Sender hver oppdatering til riktig handler |
 | `src/handlers/*` | Tekst, dokument, knapper, kommandoer, commit og cron |
-| `src/claude.ts` | Systemprompt og Claude-kall (structured outputs) |
+| `src/claude.ts` | Systemprompt, felles prompter og Claude-kall (structured outputs) |
+| `src/foundry.ts` | OpenAI-modell i Microsoft Foundry via Responses API (structured outputs) |
 | `src/schema.ts` | JSON-skjema (zod), streng validering og normalisering |
 | `src/mapping.ts` | Kalenderregler: punkt → Google-hendelse(r) |
 | `src/docx.ts` | Uttrekk av tekst (og tabeller) fra Word-filer |
@@ -48,19 +49,23 @@ Alt arbeid mot Claude skjer i køen. PDF-analyse kan ta lenger enn de 30 sekunde
 
 ## Konfigurasjon
 
-**Hemmeligheter** settes som Worker secrets og ligger aldri i repoet: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_ALLOWED_CHAT_ID`, `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` og `GOOGLE_REFRESH_TOKEN`.
+**Hemmeligheter** settes som Worker secrets og ligger aldri i repoet: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_ALLOWED_CHAT_ID`, `FOUNDRY_API_KEY` (eller `ANTHROPIC_API_KEY` hvis `AI_PROVIDER = "anthropic"`), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` og `GOOGLE_REFRESH_TOKEN`.
 
 **Innstillinger** ligger under `[vars]` i `wrangler.toml`:
 
 | Variabel | Standard | Betydning |
 |---|---|---|
 | `GOOGLE_CALENDAR_ID` | Familie-kalenderen | Kalenderen det skrives til |
-| `CHILDREN` | Sverre (2C, blå), Astrid (Friluftsgruppa, rosa) | Navn, `colorId` og kjennetegn Claude bruker for å finne riktig barn |
+| `CHILDREN` | Sverre (2C, blå), Astrid (Friluftsgruppa, rosa) | Navn, `colorId` og kjennetegn modellen bruker for å finne riktig barn |
 | `BOTH_COLOR_ID` | `5` (gul) | Fargen for «Begge» |
 | `REQUIRE_APPROVAL_FOR_TEXT` | `false` | `true`: fritekst går også gjennom [OK]/[Rett]/[Avbryt] |
 | `AUTO_APPROVE` | `false` | `true`: ukeplaner skrives uten godkjenning |
-| `CLAUDE_MODEL` | `claude-sonnet-5-5` | Claude-modellen som brukes |
-| `CLAUDE_EFFORT` | `medium` | `low`/`medium`/`high`: høyere gir grundigere, men tregere og dyrere svar |
+| `AI_PROVIDER` | `foundry` | `foundry` (OpenAI i Microsoft Foundry) eller `anthropic` (Claude) |
+| `FOUNDRY_ENDPOINT` | – | Endepunktet til Foundry-ressursen, f.eks. `https://<ressurs>.openai.azure.com/` |
+| `FOUNDRY_DEPLOYMENT` | `gpt-5-mini` | Navnet på deploymenten i Foundry |
+| `FOUNDRY_REASONING_EFFORT` | `medium` | `low`/`medium`/`high` for resonneringsmodeller. Tom for gpt-4.1/gpt-4o |
+| `CLAUDE_MODEL` | `claude-sonnet-5-5` | Claude-modellen (bare med `anthropic`) |
+| `CLAUDE_EFFORT` | `medium` | `low`/`medium`/`high` (bare med `anthropic`) |
 | `DEFAULT_EVENT_MINUTES` | `60` | Lengden på en hendelse når bare starttid er kjent |
 | `EVENT_REMINDER_MINUTES` | `60` | Varsel før hendelser med klokkeslett |
 | `LOW_CONFIDENCE` | `0.7` | Punkter under denne grensen markeres med ⚠️ |
@@ -155,7 +160,7 @@ openssl rand -hex 32
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
 npx wrangler secret put TELEGRAM_ALLOWED_CHAT_ID
-npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put FOUNDRY_API_KEY   # eller ANTHROPIC_API_KEY med AI_PROVIDER = "anthropic"
 npx wrangler secret put GOOGLE_CLIENT_ID
 npx wrangler secret put GOOGLE_CLIENT_SECRET
 npx wrangler secret put GOOGLE_REFRESH_TOKEN
@@ -178,7 +183,7 @@ Noter URL-en, f.eks. `https://familiebot.<ditt-subdomene>.workers.dev`.
 https://familiebot.<ditt-subdomene>.workers.dev/setup?key=<TELEGRAM_WEBHOOK_SECRET>
 ```
 
-Siden setter webhooken til riktig adresse med riktig `secret_token`. Den sjekker også at alle secrets finnes, og at Telegram-boten, chat-ID-en, Google-innloggingen, kalenderen, Drive-mappen og Claude-nøkkelen virker. Hver sjekk får ✅ eller ❌ med forklaring. Siden er beskyttet med webhook-secreten og viser aldri verdiene til hemmelighetene. Du kan åpne den igjen når som helst.
+Siden setter webhooken til riktig adresse med riktig `secret_token`. Den sjekker også at alle secrets finnes, og at Telegram-boten, chat-ID-en, Google-innloggingen, kalenderen, Drive-mappen og modellen (Foundry-deploymenten eller Claude-nøkkelen) virker. Hver sjekk får ✅ eller ❌ med forklaring. Siden er beskyttet med webhook-secreten og viser aldri verdiene til hemmelighetene. Du kan åpne den igjen når som helst.
 
 ### 7b. Sett webhook manuelt (alternativ)
 
@@ -264,11 +269,27 @@ Velger du varsel, gjelder disse tidene:
 
 - Hvert webhook-kall må ha riktig `X-Telegram-Bot-Api-Secret-Token`, som sammenlignes i konstant tid. Ellers svarer boten 401.
 - Meldinger og knappetrykk fra andre chat-ID-er ignoreres helt, uten svar. Dette sjekkes både i webhooken og i køen.
-- Innholdet i PDF-er, bilder og meldinger regnes som **data**. Systemprompten sier eksplisitt at kommandolignende tekst i dokumenter skal ignoreres. Claude kan bare returnere JSON etter et fast skjema, som valideres med zod. Modellen har ingen verktøy og kan ikke slette noe.
+- Innholdet i PDF-er, bilder og meldinger regnes som **data**. Systemprompten sier eksplisitt at kommandolignende tekst i dokumenter skal ignoreres. Modellen kan bare returnere JSON etter et fast skjema, som valideres med zod. Modellen har ingen verktøy og kan ikke slette noe.
 - **Ingenting slettes uten bekreftelse:** Sletting skjer bare etter trykk på knappen i `/angre` eller «Slett fjernede».
 - Loggingen er strukturert (JSON). Den viser hva som ble lest og skrevet (ID-er, `agentKey`, antall, modell, tokenforbruk), men aldri hemmeligheter eller meldingstekst.
 
-## Claude
+## Microsoft Foundry (standard)
+
+1. Opprett en Foundry-ressurs på [ai.azure.com](https://ai.azure.com) (eller en Azure OpenAI-ressurs i Azure-portalen).
+2. Under **Models + endpoints**: deploy en modell som støtter bilder og structured outputs, f.eks. `gpt-5-mini`, `gpt-5` eller `gpt-4.1`. Noter **deployment-navnet**.
+3. Kopier **endepunktet** og **nøkkelen** (Keys and Endpoint). Sett `FOUNDRY_ENDPOINT` og `FOUNDRY_DEPLOYMENT` i `wrangler.toml`, og nøkkelen som secret: `npx wrangler secret put FOUNDRY_API_KEY`.
+4. Bruker du en modell uten resonnering (gpt-4.1, gpt-4o), sett `FOUNDRY_REASONING_EFFORT = ""`.
+
+Detaljer:
+
+- Botten bruker v1-API-et (`/openai/v1/responses`) med `api-key`-header, så ingen `api-version` trengs.
+- Structured outputs (`text.format` med `strict: true`) gjør at svaret følger samme JSON-skjema som for Claude. Skjemaet lages fra zod-skjemaet, og svaret valideres like strengt etterpå.
+- PDF-er lastes opp til Foundry (`purpose: assistants`) og slettes rett etter kallet. Bilder sendes inline som data-URL.
+- Svar lagres ikke hos Azure (`store: false`). Stopper Azure sitt innholdsfilter en forespørsel, får du en forklarende feilmelding i Telegram.
+
+## Claude (alternativ)
+
+Sett `AI_PROVIDER = "anthropic"` og secret `ANTHROPIC_API_KEY`.
 
 - Modellen er `claude-sonnet-5-5` med `effort: medium`. Gir uttrekket fra ukeplanene for dårlig kvalitet, kan du bytte til `claude-opus-5-5` eller sette `CLAUDE_EFFORT = "high"`.
 - PDF-er og bilder lastes opp via Claudes Files API i stedet for å base64-kodes i Workeren. Det sparer CPU-tid. Filene slettes automatisk hos Anthropic etter en time.
@@ -280,19 +301,19 @@ Velger du varsel, gjelder disse tidene:
 
 ### Word-filer (.docx)
 
-Claude kan ikke lese .docx direkte, så botten gjør om Word-filen til tekst først. Det skjer i Workeren, uten eksterne biblioteker:
+Modellene kan ikke lese .docx direkte, så botten gjør om Word-filen til tekst først. Det skjer i Workeren, uten eksterne biblioteker:
 
 - **Avsnitt** blir linjer.
 - **Tabeller** blir `| celle | celle |`-rader, slik at kolonner som ukedager kommer med.
 - **Topp- og bunntekst** tas med. Der står ofte ukenummeret.
 
-Teksten sendes til Claude som et dokument. Inneholder Word-filen nesten ingen tekst, fordi ukeplanen er limt inn som et bilde, sendes det største bildet i stedet. Google Docs i Drive-mappen eksporteres som .docx og behandles likt.
+Teksten sendes til modellen som et dokument. Inneholder Word-filen nesten ingen tekst, fordi ukeplanen er limt inn som et bilde, sendes det største bildet i stedet. Google Docs i Drive-mappen eksporteres som .docx og behandles likt.
 
 ### Tillegg til JSON-skjemaet
 
 Skjemaet følger spesifikasjonen, med to tillegg per punkt:
 
-- `notes`: forklaring når Claude er usikker, som spesifikasjonen ber om.
+- `notes`: forklaring når modellen er usikker, som spesifikasjonen ber om.
 - `child`: gjør at én fritekstmelding kan gjelde flere barn («Sverre har fotball og Astrid svømming»).
 
 `date` kan være `null` når datoen mangler. Da stiller botten ett oppfølgingsspørsmål i stedet for å gjette.
@@ -304,7 +325,7 @@ Botten er laget for å holde seg innenfor gratisplanen:
 | Grense (Free) | Hvordan botten holder seg under |
 |---|---|
 | 100 000 kall per døgn | Webhook og cron bruker noen hundre per døgn |
-| 10 ms CPU per kall | Ventetid på Claude, Google og Telegram teller ikke. PDF-er sendes via Files API uten base64-koding. |
+| 10 ms CPU per kall | Ventetid på modellen, Google og Telegram teller ikke. PDF-er lastes opp som filer uten base64-koding. |
 | 50 utgående kall per kjøring | Eksisterende hendelser hentes i **ett** kall før en ukeplan skrives. En ukeplan på 10 punkter bruker rundt 15–20 kall. |
 | KV: 1000 skriv per døgn | Drive-sjekken hvert 5. minutt skriver bare når det finnes en ny fil. Access token caches i en time. |
 | Queues: 10 000 operasjoner per døgn | Noen få per melding |

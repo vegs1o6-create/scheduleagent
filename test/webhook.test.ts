@@ -129,7 +129,7 @@ describe("oppsettside (/setup)", () => {
     expect(JSON.parse(setWebhook.body!)).toMatchObject({ url: "https://bot.example/telegram", secret_token: SECRET });
     expect(text).toContain("✅ Telegram-bot: @familie_bot");
     expect(text).toContain("✅ Telegram-webhook: Satt til https://bot.example/telegram");
-    expect(text).toContain("❌ Secrets i Cloudflare: Mangler: ANTHROPIC_API_KEY");
+    expect(text).toContain("❌ Secrets i Cloudflare: Mangler: FOUNDRY_API_KEY");
     expect(text).not.toContain(SECRET);
     expect(text).not.toContain("123:abc");
     fetchSpy.mockRestore();
@@ -154,7 +154,7 @@ describe("toleranse for mellomrom i secrets", () => {
     const missing = await (await worker.fetch(new Request("https://bot.example/setup?key=x"), env, ctx)).text();
     expect(missing).toContain("finner ingen TELEGRAM_WEBHOOK_SECRET");
     expect(missing).toContain("✅ TELEGRAM_BOT_TOKEN");
-    expect(missing).toContain("❌ ANTHROPIC_API_KEY");
+    expect(missing).toContain("❌ FOUNDRY_API_KEY");
     expect(missing).not.toContain("123:abc");
   });
 });

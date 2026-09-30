@@ -1,5 +1,5 @@
 import type { Env, JobMessage } from "./env";
-import { loadConfig } from "./env";
+import { aiProvider, loadConfig } from "./env";
 import type { Deps } from "./deps";
 import { Store } from "./store";
 import { Telegram } from "./telegram";
@@ -7,6 +7,7 @@ import { GoogleAuth } from "./google-auth";
 import { GoogleCalendar } from "./calendar";
 import { GoogleDrive } from "./drive";
 import { ClaudeClient } from "./claude";
+import { FoundryClient, foundrySettings } from "./foundry";
 import { handleWebhook } from "./webhook";
 import { handleSetup } from "./setup";
 import { processUpdate } from "./router";
@@ -37,7 +38,10 @@ export function buildDeps(env: Env): Deps {
     telegram: new Telegram((env.TELEGRAM_BOT_TOKEN ?? "").trim()),
     calendar: new GoogleCalendar(config.calendarId, auth),
     drive: new GoogleDrive(auth),
-    claude: new ClaudeClient((env.ANTHROPIC_API_KEY ?? "").trim(), config, env.ANTHROPIC_WORKSPACE_ID),
+    claude:
+      aiProvider(env) === "anthropic"
+        ? new ClaudeClient((env.ANTHROPIC_API_KEY ?? "").trim(), config, env.ANTHROPIC_WORKSPACE_ID)
+        : new FoundryClient(foundrySettings(env), config),
     enqueue: async (job) => {
       await env.JOBS.send(job);
     },
