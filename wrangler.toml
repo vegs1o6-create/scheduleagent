@@ -43,9 +43,9 @@ GOOGLE_CALENDAR_ID = "499d12834b64c2295b7cb8cbc7a44dfcce198b9552f204263cd5cf4241
 AI_PROVIDER = "foundry"
 # Endepunktet til Foundry-/Azure OpenAI-ressursen (Foundry-portalen → Oversikt/Keys and Endpoint).
 # Både https://<ressurs>.openai.azure.com/ og https://<ressurs>.services.ai.azure.com/ fungerer.
-FOUNDRY_ENDPOINT = "https://<ressurs>.openai.azure.com/"
+FOUNDRY_ENDPOINT = "https://seiltips-resource.services.ai.azure.com/openai/v1/responses"
 # Navnet du ga deploymenten i Foundry (Models + endpoints), ikke nødvendigvis modellnavnet.
-FOUNDRY_DEPLOYMENT = "gpt-5-mini"
+FOUNDRY_DEPLOYMENT = "gpt-6-luna"
 # low/medium/high for resonneringsmodeller (gpt-5-familien, o3/o4). Sett til "" for gpt-4.1/gpt-4o.
 FOUNDRY_REASONING_EFFORT = "medium"
 # Brukes bare når AI_PROVIDER = "anthropic".
