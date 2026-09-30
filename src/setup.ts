@@ -1,6 +1,7 @@
 import { anthropicClient } from "./claude";
 import type { Env } from "./env";
-import { loadConfig } from "./env";
+import { aiProvider, loadConfig } from "./env";
+import { FoundryClient, foundryBaseUrl, foundrySettings } from "./foundry";
 import { GoogleAuth } from "./google-auth";
 import { GoogleCalendar } from "./calendar";
 import { GoogleDrive } from "./drive";
@@ -8,15 +9,18 @@ import { timingSafeEqual } from "./webhook";
 import { addDays, todayIn, zonedRfc3339 } from "./dates";
 import { log } from "./log";
 
-const REQUIRED_SECRETS = [
-  "TELEGRAM_BOT_TOKEN",
-  "TELEGRAM_WEBHOOK_SECRET",
-  "TELEGRAM_ALLOWED_CHAT_ID",
-  "ANTHROPIC_API_KEY",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "GOOGLE_REFRESH_TOKEN",
-] as const;
+/** Secrets som må finnes; nøkkelen til modellen avhenger av AI_PROVIDER. */
+function requiredSecrets(env: Env): string[] {
+  return [
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_WEBHOOK_SECRET",
+    "TELEGRAM_ALLOWED_CHAT_ID",
+    aiProvider(env) === "anthropic" ? "ANTHROPIC_API_KEY" : "FOUNDRY_API_KEY",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REFRESH_TOKEN",
+  ];
+}
 
 interface Check {
   name: string;
@@ -57,7 +61,7 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
   if (!secret || !timingSafeEqual(key, secret)) {
     log("setup_rejected", { hasSecret: Boolean(secret) });
     // Hjelpsom feilmelding uten å avsløre verdien (bare lengden).
-    const present = REQUIRED_SECRETS.map(
+    const present = requiredSecrets(env).map(
       (n) => `  ${(env as unknown as Record<string, string | undefined>)[n]?.trim() ? "✅" : "❌"} ${n}`,
     ).join("\n");
     const reason = !secret
@@ -76,11 +80,12 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
   }
 
   const checks: Check[] = [];
-  const missing = REQUIRED_SECRETS.filter((n) => !(env as unknown as Record<string, string | undefined>)[n]?.trim());
+  const required = requiredSecrets(env);
+  const missing = required.filter((n) => !(env as unknown as Record<string, string | undefined>)[n]?.trim());
   checks.push({
     name: "Secrets i Cloudflare",
     ok: missing.length === 0,
-    detail: missing.length ? `Mangler: ${missing.join(", ")}` : "Alle 7 er lagt inn",
+    detail: missing.length ? `Mangler: ${missing.join(", ")}` : `Alle ${required.length} er lagt inn`,
   });
 
   if (!/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
@@ -162,25 +167,36 @@ export async function handleSetup(request: Request, env: Env): Promise<Response>
     }
   }
 
-  checks.push(
-    await check("Claude API", async () => {
-      try {
-        const model = await anthropicClient(env.ANTHROPIC_API_KEY?.trim() ?? "", env.ANTHROPIC_WORKSPACE_ID).models.retrieve(
-          config.model,
-        );
-        return `Nøkkelen virker (${model.id})`;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("anthropic-workspace-id")) {
-          throw new Error(
-            "Nøkkelen er ikke knyttet til et workspace. Enten: lag en ny nøkkel inne i et workspace på console.anthropic.com " +
-              "og bytt ANTHROPIC_API_KEY, eller legg inn workspace-ID-en (wrkspc_…) som secret ANTHROPIC_WORKSPACE_ID.",
+  if (aiProvider(env) === "foundry") {
+    const settings = foundrySettings(env);
+    checks.push(
+      await check("Microsoft Foundry", async () => {
+        const base = foundryBaseUrl(settings.endpoint);
+        const model = await new FoundryClient(settings, config).ping();
+        return `Deployment «${settings.deployment}» svarer (${model}) på ${base}`;
+      }),
+    );
+  } else {
+    checks.push(
+      await check("Claude API", async () => {
+        try {
+          const model = await anthropicClient(env.ANTHROPIC_API_KEY?.trim() ?? "", env.ANTHROPIC_WORKSPACE_ID).models.retrieve(
+            config.model,
           );
+          return `Nøkkelen virker (${model.id})`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("anthropic-workspace-id")) {
+            throw new Error(
+              "Nøkkelen er ikke knyttet til et workspace. Enten: lag en ny nøkkel inne i et workspace på console.anthropic.com " +
+                "og bytt ANTHROPIC_API_KEY, eller legg inn workspace-ID-en (wrkspc_…) som secret ANTHROPIC_WORKSPACE_ID.",
+            );
+          }
+          throw err;
         }
-        throw err;
-      }
-    }),
-  );
+      }),
+    );
+  }
 
   const allOk = checks.every((c) => c.ok);
   const lines = [

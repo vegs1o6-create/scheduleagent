@@ -39,6 +39,16 @@ crons = ["*/5 * * * *", "0 16,17 * * SUN"]
 [vars]
 TIMEZONE = "Europe/Oslo"
 GOOGLE_CALENDAR_ID = "499d12834b64c2295b7cb8cbc7a44dfcce198b9552f204263cd5cf42418a637c@group.calendar.google.com"
+# Modell-leverandør: "foundry" (OpenAI-modell i Microsoft Foundry) eller "anthropic" (Claude).
+AI_PROVIDER = "foundry"
+# Endepunktet til Foundry-/Azure OpenAI-ressursen (Foundry-portalen → Oversikt/Keys and Endpoint).
+# Både https://<ressurs>.openai.azure.com/ og https://<ressurs>.services.ai.azure.com/ fungerer.
+FOUNDRY_ENDPOINT = "https://<ressurs>.openai.azure.com/"
+# Navnet du ga deploymenten i Foundry (Models + endpoints), ikke nødvendigvis modellnavnet.
+FOUNDRY_DEPLOYMENT = "gpt-5-mini"
+# low/medium/high for resonneringsmodeller (gpt-5-familien, o3/o4). Sett til "" for gpt-4.1/gpt-4o.
+FOUNDRY_REASONING_EFFORT = "medium"
+# Brukes bare når AI_PROVIDER = "anthropic".
 CLAUDE_MODEL = "claude-sonnet-5-5"
 CLAUDE_EFFORT = "medium"
 REQUIRE_APPROVAL_FOR_TEXT = "false"
