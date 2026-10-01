@@ -64,7 +64,7 @@ LOW_CONFIDENCE = "0.7"
 DRIVE_FOLDER_ID = "1kljn8OYt8eo8684BMOLiiAZufFiR2I1C"
 # Infoskjermen (/skjerm?key=<DISPLAY_KEY>): kalendere som vises (kommaseparert, tom = GOOGLE_CALENDAR_ID)
 # og hvor mange dager frem. Nøkkelen settes med `npx wrangler secret put DISPLAY_KEY`.
-DISPLAY_CALENDAR_IDS = ""
+DISPLAY_CALENDAR_IDS = "499d12834b64c2295b7cb8cbc7a44dfcce198b9552f204263cd5cf42418a637c@group.calendar.google.com,66f954e1ed2209958a10cd325171bf4f5c56f777586f0d4229f9b7646263f71e@group.calendar.google.com"
 DISPLAY_DAYS = "14"
 # Værvarsel fra Yr (MET Norway) øverst på infoskjermen. Breddegrad/lengdegrad for hjemmet ditt
 # (høyreklikk på stedet i Google Maps for å kopiere dem). Tom = ingen vær. Satt til Oppsal, Oslo.

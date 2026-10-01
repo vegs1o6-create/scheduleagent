@@ -46,6 +46,8 @@ export interface DisplayData {
   legend: { name: string; color: string }[];
   days: DisplayDay[];
   notes: Note[];
+  /** Hvor mange av kalenderne som ikke kunne leses (de andre vises likevel). */
+  calendarErrors: number;
   /** Værvarsel fra Yr for de neste 7 dagene, eller null (ikke satt opp / feilet). */
   weather: WeatherDay[] | null;
 }
@@ -130,11 +132,18 @@ export async function displayData(deps: DisplayDeps): Promise<DisplayData> {
   const today = todayIn(now, config.timezone);
   const timeMin = zonedRfc3339(today, "00:00", config.timezone);
   const timeMax = zonedRfc3339(addDays(today, deps.days), "00:00", config.timezone);
-  const [lists, notes, weather] = await Promise.all([
-    Promise.all(deps.calendarIds.map((id) => deps.listEvents(id, timeMin, timeMax))),
+  const [results, notes, weather] = await Promise.all([
+    Promise.allSettled(deps.calendarIds.map((id) => deps.listEvents(id, timeMin, timeMax))),
     deps.store.getNotes(),
     deps.weather ? deps.weather().catch(() => null) : Promise.resolve(null),
   ]);
+  // Én kalender som feiler (f.eks. manglende tilgang) skal ikke ta ned hele skjermen.
+  const lists: CalendarEvent[][] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") lists.push(r.value);
+    else log("display_calendar_failed", { calendarId: deps.calendarIds[i], error: String(r.reason) });
+  });
+  if (!lists.length) throw (results[0] as PromiseRejectedResult).reason;
   const legend = config.children
     .filter((c) => c.colorId && GOOGLE_COLORS[c.colorId])
     .map((c) => ({ name: c.name, color: GOOGLE_COLORS[c.colorId!]! }));
@@ -147,6 +156,7 @@ export async function displayData(deps: DisplayDeps): Promise<DisplayData> {
     legend,
     days: groupByDay(lists.flat(), today, deps.days, config.timezone),
     notes,
+    calendarErrors: results.length - lists.length,
     weather,
   };
 }
@@ -334,6 +344,7 @@ button.add { background: var(--accent); color: #fff; border: 0; border-radius: 2
   var MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
   var lastOk = null;
   var lastToday = null;
+  var calendarErrors = 0;
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -367,6 +378,9 @@ button.add { background: var(--accent); color: #fff; border: 0; border-radius: 2
     if (mins >= 10) {
       el.className = "status err";
       el.textContent = "Ikke oppdatert på " + mins + " min";
+    } else if (calendarErrors) {
+      el.className = "status err";
+      el.textContent = "Klarte ikke å lese " + calendarErrors + (calendarErrors === 1 ? " kalender" : " kalendere");
     } else {
       el.className = "status";
       el.textContent = "";
@@ -447,6 +461,7 @@ button.add { background: var(--accent); color: #fff; border: 0; border-radius: 2
       // Ny dag: last siden på nytt (henter også eventuelle nye versjoner av siden).
       if (lastToday && data.today !== lastToday) { location.reload(); return; }
       lastToday = data.today;
+      calendarErrors = data.calendarErrors || 0;
       renderCalendar(data);
       renderNotes(data.notes);
       renderWeather(data.weather, data.today);
