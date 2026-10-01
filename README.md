@@ -74,7 +74,7 @@ Alt arbeid mot modellen skjer i køen. PDF-analyse kan ta lenger enn de 30 sekun
 | `DRIVE_FOLDER_ID` | tom (av) | Google Drive-mappen som overvåkes for nye ukeplaner |
 | `DISPLAY_CALENDAR_IDS` | tom (= `GOOGLE_CALENDAR_ID`) | Kalendere som vises på infoskjermen, kommaseparert |
 | `DISPLAY_DAYS` | `14` | Hvor mange dager frem infoskjermen viser |
-| `WEATHER_LAT`, `WEATHER_LON` | Oslo sentrum | Posisjonen for værvarselet fra Yr på infoskjermen. Tom = ingen vær |
+| `WEATHER_LAT`, `WEATHER_LON` | Oppsal, Oslo | Posisjonen for værvarselet fra Yr på infoskjermen. Tom = ingen vær |
 
 Fargekoder i Google Calendar: 1 lavendel, 2 salvie, 3 drue, **4 flamingo (rosa)**, **5 banan (gul)**, 6 mandarin, 7 påfugl, 8 grafitt, **9 blåbær (blå)**, 10 basilikum, 11 tomat.
 
@@ -297,7 +297,7 @@ Siden henter nye data hvert 2. minutt, laster seg selv på nytt ved midnatt, og 
    - **Skjerm og lysstyrke → Autolås → Aldri** (og ha laderen i).
    - Valgfritt: **Tilgjengelighet → Guidet tilgang** låser iPaden til denne appen. Start med trippelklikk på Hjem-/toppknappen.
    - Valgfritt: **Skjerm og lysstyrke → Automatisk** (lys/mørk) gir mørk skjerm om kvelden.
-5. **Vær:** sett `WEATHER_LAT` og `WEATHER_LON` i `wrangler.toml` til der dere bor (høyreklikk på huset i Google Maps, så kopierer du koordinatene). Standard er Oslo sentrum.
+5. **Vær:** sett `WEATHER_LAT` og `WEATHER_LON` i `wrangler.toml` til der dere bor (høyreklikk på huset i Google Maps, så kopierer du koordinatene). Satt til Oppsal i Oslo.
 6. Flere kalendere (f.eks. en delt jobbkalender): sett `DISPLAY_CALENDAR_IDS = "familie-id,annen-id"` i `wrangler.toml`. Google-kontoen fra steg 3 må ha tilgang til dem.
 
 Siden bruker rundt 720 kall til Google Kalender i døgnet (ett hvert 2. minutt), godt innenfor gratisgrensene. Værdata hentes fra [MET Norway](https://api.met.no/) (samme data som Yr, gratis) og caches i Cloudflare i 30 minutter. Feiler værkallet, vises kalenderen som vanlig uten vær. Notater skrives til KV bare når du legger til eller fjerner et.
