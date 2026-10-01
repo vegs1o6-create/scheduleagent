@@ -41,6 +41,9 @@ export interface Env {
   DISPLAY_CALENDAR_IDS?: string;
   /** Hvor mange dager frem infoskjermen viser (standard 14). */
   DISPLAY_DAYS?: string;
+  /** Posisjonen for værvarselet fra Yr på infoskjermen (tom = ingen vær). */
+  WEATHER_LAT?: string;
+  WEATHER_LON?: string;
 }
 
 /** Jobber som legges i køen. */

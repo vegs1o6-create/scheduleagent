@@ -5,6 +5,7 @@ import { MAX_NOTE_LENGTH } from "./store";
 import { addDays, formatDateNo, todayIn, zonedParts, zonedRfc3339 } from "./dates";
 import { timingSafeEqual } from "./webhook";
 import { log } from "./log";
+import type { WeatherDay } from "./weather";
 
 /** Google Calendar sine faste farger for colorId 1–11. */
 export const GOOGLE_COLORS: Record<string, string> = {
@@ -45,6 +46,8 @@ export interface DisplayData {
   legend: { name: string; color: string }[];
   days: DisplayDay[];
   notes: Note[];
+  /** Værvarsel fra Yr for de neste 7 dagene, eller null (ikke satt opp / feilet). */
+  weather: WeatherDay[] | null;
 }
 
 /** Det infoskjermen trenger, samlet slik at testene kan bytte ut deler. */
@@ -55,6 +58,8 @@ export interface DisplayDeps {
   listEvents: (calendarId: string, timeMin: string, timeMax: string) => Promise<CalendarEvent[]>;
   calendarIds: string[];
   days: number;
+  /** Henter værvarselet (null når posisjon ikke er satt eller kallet feiler). */
+  weather?: () => Promise<WeatherDay[] | null>;
   now: () => Date;
 }
 
@@ -125,9 +130,10 @@ export async function displayData(deps: DisplayDeps): Promise<DisplayData> {
   const today = todayIn(now, config.timezone);
   const timeMin = zonedRfc3339(today, "00:00", config.timezone);
   const timeMax = zonedRfc3339(addDays(today, deps.days), "00:00", config.timezone);
-  const [lists, notes] = await Promise.all([
+  const [lists, notes, weather] = await Promise.all([
     Promise.all(deps.calendarIds.map((id) => deps.listEvents(id, timeMin, timeMax))),
     deps.store.getNotes(),
+    deps.weather ? deps.weather().catch(() => null) : Promise.resolve(null),
   ]);
   const legend = config.children
     .filter((c) => c.colorId && GOOGLE_COLORS[c.colorId])
@@ -141,6 +147,7 @@ export async function displayData(deps: DisplayDeps): Promise<DisplayData> {
     legend,
     days: groupByDay(lists.flat(), today, deps.days, config.timezone),
     notes,
+    weather,
   };
 }
 
@@ -247,7 +254,17 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 header { grid-column: 1 / -1; display: flex; align-items: flex-end; justify-content: space-between; }
 .clock { font-size: 64px; font-weight: 600; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
 .date { font-size: 22px; color: var(--muted); margin-top: 6px; }
-.legend { text-align: right; font-size: 16px; color: var(--muted); }
+.right { display: flex; flex-direction: column; align-items: flex-end; }
+.weather { display: flex; }
+.wday { width: 84px; text-align: center; padding: 6px 2px; border-radius: 12px; }
+.wday + .wday { margin-left: 4px; }
+.wday.today { background: var(--panel); }
+.wday .wd { font-size: 15px; color: var(--muted); font-weight: 600; }
+.wday .ic { font-size: 30px; line-height: 1.25; }
+.wday .t { font-size: 18px; font-variant-numeric: tabular-nums; }
+.wday .t .lo { color: var(--muted); font-size: 15px; }
+.wday .p { font-size: 13px; color: #1e88e5; min-height: 16px; }
+.legend { text-align: right; font-size: 16px; color: var(--muted); margin-top: 8px; }
 .legend span { display: inline-block; margin-left: 14px; }
 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 6px; margin-right: 6px; vertical-align: -1px; }
 .status { font-size: 13px; color: var(--muted); margin-top: 6px; }
@@ -281,6 +298,9 @@ button.add { background: var(--accent); color: #fff; border: 0; border-radius: 2
   .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height: auto; padding: 16px; }
   .clock { font-size: 44px; }
   .legend { display: none; }
+  header { flex-direction: column; align-items: flex-start; }
+  .right { align-items: flex-start; margin-top: 12px; max-width: 100%; overflow-x: auto; }
+  .wday { width: 64px; }
   .ev .time { width: 110px; }
 }
 </style>
@@ -292,7 +312,8 @@ button.add { background: var(--accent); color: #fff; border: 0; border-radius: 2
       <div class="clock" id="clock">--:--</div>
       <div class="date" id="date"></div>
     </div>
-    <div>
+    <div class="right">
+      <div class="weather" id="weather"></div>
       <div class="legend" id="legend"></div>
       <div class="status" id="status" style="text-align:right"></div>
     </div>
@@ -381,6 +402,33 @@ button.add { background: var(--accent); color: #fff; border: 0; border-radius: 2
     $("legend").innerHTML = legend;
   }
 
+  // Yr-symbolkoder → emoji. Koden kan ha _day/_night/_polartwilight til slutt.
+  var ICONS = [
+    ["thunder", "⛈️"], ["snow", "❄️"], ["sleet", "🌨️"], ["rainshowers", "🌦️"], ["rain", "🌧️"],
+    ["fog", "🌫️"], ["partlycloudy", "⛅"], ["cloudy", "☁️"], ["fair", "🌤️"], ["clearsky", "☀️"]
+  ];
+  function icon(code) {
+    if (!code) return "";
+    if (code.indexOf("clearsky_night") === 0) return "🌙";
+    for (var i = 0; i < ICONS.length; i++) if (code.indexOf(ICONS[i][0]) !== -1) return ICONS[i][1];
+    return "";
+  }
+  var SHORT = ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"];
+  function renderWeather(days, today) {
+    if (!days || !days.length) { $("weather").innerHTML = ""; return; }
+    var html = "";
+    for (var i = 0; i < days.length && i < 7; i++) {
+      var w = days[i];
+      var p = w.date.split("-");
+      var name = w.date === today ? "I dag" : SHORT[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()];
+      html += '<div class="wday' + (w.date === today ? " today" : "") + '"><div class="wd">' + name + "</div>" +
+        '<div class="ic">' + icon(w.symbol) + "</div>" +
+        '<div class="t">' + (w.max === null ? "" : w.max + "°") + ' <span class="lo">' + (w.min === null ? "" : w.min + "°") + "</span></div>" +
+        '<div class="p">' + (w.precipitation >= 0.5 ? String(w.precipitation).replace(".", ",") + " mm" : "") + "</div></div>";
+    }
+    $("weather").innerHTML = html;
+  }
+
   function renderNotes(notes) {
     var html = "";
     if (!notes.length) html = '<div class="empty">Ingen notater.</div>';
@@ -401,6 +449,7 @@ button.add { background: var(--accent); color: #fff; border: 0; border-radius: 2
       lastToday = data.today;
       renderCalendar(data);
       renderNotes(data.notes);
+      renderWeather(data.weather, data.today);
       updateStatus();
     }).catch(function (err) {
       var el = $("status");

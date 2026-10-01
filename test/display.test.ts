@@ -92,6 +92,7 @@ describe("infoskjerm: HTTP", () => {
     expect(data.days[0]!.events[0]!.title).toBe("Sverre: Fotball");
     expect(data.legend.map((l) => l.name)).toEqual(["Sverre", "Astrid", "Begge"]);
     expect(data.notes.map((n) => n.text)).toEqual(["Kjøp melk"]);
+    expect(data.weather).toBeNull();
 
     const del = await handleDisplay(req("/skjerm/notater/slett?key=hemmelig", { id: note.id }), env, d);
     expect(await del.json()).toEqual({ removed: true, notes: [] });
@@ -123,5 +124,16 @@ describe("infoskjerm: Telegram", () => {
     await run(deps, textUpdate("/notat"));
     expect(telegram.last().text).toContain("/notat Kjøpe");
     expect(await deps.store.getNotes()).toEqual([]);
+  });
+});
+
+describe("infoskjerm: vær", () => {
+  it("tar med været, og en feil i værkallet stopper ikke kalenderen", async () => {
+    const { d } = displayDeps();
+    const day = { date: "2026-09-29", symbol: "fair_day", max: 14, min: 6, precipitation: 0 };
+    expect((await displayData({ ...d, weather: async () => [day] })).weather).toEqual([day]);
+    const failing = await displayData({ ...d, weather: async () => Promise.reject(new Error("nede")) });
+    expect(failing.weather).toBeNull();
+    expect(failing.days).toHaveLength(14);
   });
 });

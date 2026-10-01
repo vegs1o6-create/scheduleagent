@@ -11,6 +11,7 @@ import { FoundryClient, foundrySettings } from "./foundry";
 import { handleWebhook } from "./webhook";
 import { handleSetup } from "./setup";
 import { handleDisplay, type DisplayDeps } from "./display";
+import { fetchWeather } from "./weather";
 import { processUpdate } from "./router";
 import { handleSundayReminder } from "./handlers/cron";
 import { handleDriveFile, pollDrive } from "./handlers/drive";
@@ -72,6 +73,10 @@ export function buildDisplayDeps(env: Env): DisplayDeps {
     listEvents: (calendarId, timeMin, timeMax) => new GoogleCalendar(calendarId, auth).list(timeMin, timeMax),
     calendarIds: ids.length ? ids : [config.calendarId],
     days: Number.isInteger(days) && days > 0 && days <= 60 ? days : 14,
+    weather:
+      env.WEATHER_LAT?.trim() && env.WEATHER_LON?.trim()
+        ? () => fetchWeather(env.WEATHER_LAT!.trim(), env.WEATHER_LON!.trim(), new Date(), config.timezone, 7)
+        : undefined,
     now: () => new Date(),
   };
 }

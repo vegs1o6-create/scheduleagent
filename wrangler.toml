@@ -66,3 +66,7 @@ DRIVE_FOLDER_ID = "1kljn8OYt8eo8684BMOLiiAZufFiR2I1C"
 # og hvor mange dager frem. Nøkkelen settes med `npx wrangler secret put DISPLAY_KEY`.
 DISPLAY_CALENDAR_IDS = ""
 DISPLAY_DAYS = "14"
+# Værvarsel fra Yr (MET Norway) øverst på infoskjermen. Breddegrad/lengdegrad for hjemmet ditt
+# (høyreklikk på stedet i Google Maps for å kopiere dem). Tom = ingen vær. Standard: Oslo sentrum.
+WEATHER_LAT = "59.9139"
+WEATHER_LON = "10.7522"
