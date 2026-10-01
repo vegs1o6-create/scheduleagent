@@ -5,12 +5,14 @@ import { approveExtraction } from "./drafts";
 import { titleFor } from "../mapping";
 import { log } from "../log";
 import { handleReminderCallback } from "./reminders";
+import { sendNoteList } from "./commands";
 
 /**
  * Knappetrykk. Formatet er "<handling>:<id>":
  *  ok/fix/no  – godkjenn, rett eller avbryt et utkast
  *  undo/keep  – bekreft eller avvis sletting (/angre og fjernede ukeplanpunkter)
  *  rt/ra/rn/rs – velg varsler etter at oppføringene er lagret
+ *  nd         – fjern et notat fra infoskjermen
  */
 export async function handleCallback(deps: Deps, cb: TgCallbackQuery): Promise<void> {
   const { telegram, store } = deps;
@@ -21,6 +23,14 @@ export async function handleCallback(deps: Deps, cb: TgCallbackQuery): Promise<v
 
   if (action === "rt" || action === "ra" || action === "rn" || action === "rs") {
     await handleReminderCallback(deps, action, id, arg, messageId);
+    return;
+  }
+
+  if (action === "nd") {
+    const removed = await store.removeNote(id);
+    if (messageId) await telegram.removeKeyboard(deps.chatId, messageId);
+    await telegram.sendMessage(deps.chatId, removed ? `🗑️ Fjernet: ${e(removed.text)}` : "Notatet var allerede fjernet.");
+    if (removed && (await store.getNotes()).length) await sendNoteList(deps);
     return;
   }
 

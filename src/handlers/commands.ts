@@ -4,6 +4,7 @@ import { addDays, formatDateNo, isoWeek, mondayOf, todayIn, zonedParts, zonedRfc
 import { escapeHtml as e } from "../telegram";
 import { newId } from "../store";
 import { titleFor } from "../mapping";
+import { MAX_NOTE_LENGTH } from "../store";
 
 export const HELP_TEXT = `<b>Familiebot</b> 👨‍👩‍👧‍👦
 
@@ -21,11 +22,14 @@ export const HELP_TEXT = `<b>Familiebot</b> 👨‍👩‍👧‍👦
 /uke – denne ukens oppføringer
 /neste – de neste 7 dagene
 /angre – slett siste opprettede oppføring (med bekreftelse)
+/notat <tekst> – legg til et notat på infoskjermen
+/notater – vis notatene (og fjern dem)
 /hjelp – denne teksten`;
 
 export async function handleCommand(deps: Deps, text: string): Promise<void> {
   const { telegram, store, config } = deps;
   const command = text.split(/\s+/)[0]!.split("@")[0]!.toLowerCase();
+  const rest = text.slice(text.split(/\s/)[0]!.length).trim();
   await store.clearMode();
   const today = todayIn(deps.now(), config.timezone);
 
@@ -80,6 +84,24 @@ export async function handleCommand(deps: Deps, text: string): Promise<void> {
       return;
     }
 
+    case "/notat": {
+      if (!rest) {
+        await telegram.sendMessage(deps.chatId, "Skriv notatet etter kommandoen, f.eks. «/notat Kjøpe bursdagsgave til Ola».");
+        return;
+      }
+      if (rest.length > MAX_NOTE_LENGTH) {
+        await telegram.sendMessage(deps.chatId, `Notatet er for langt (maks ${MAX_NOTE_LENGTH} tegn).`);
+        return;
+      }
+      await store.addNote(rest, "telegram", deps.now());
+      await telegram.sendMessage(deps.chatId, `📝 Lagt på infoskjermen: ${e(rest)}`);
+      return;
+    }
+
+    case "/notater":
+      await sendNoteList(deps);
+      return;
+
     default:
       await telegram.sendMessage(deps.chatId, "Ukjent kommando. Skriv /hjelp for oversikt.");
   }
@@ -108,4 +130,19 @@ export function formatEventList(heading: string, events: CalendarEvent[], timeZo
     out.push(`• ${time ? `<b>${time.trim()}</b> ` : ""}<a href="${e(ev.htmlLink)}">${title}</a>`);
   }
   return out.join("\n");
+}
+
+/** Notatene med en ❌-knapp per notat (callback "nd:<id>"). */
+export async function sendNoteList(deps: Deps): Promise<void> {
+  const notes = await deps.store.getNotes();
+  if (!notes.length) {
+    await deps.telegram.sendMessage(deps.chatId, "📝 Ingen notater på infoskjermen. Legg til med /notat tekst.");
+    return;
+  }
+  const lines = notes.map((n, i) => `${i + 1}. ${e(n.text)}`);
+  await deps.telegram.sendMessage(
+    deps.chatId,
+    `<b>📝 Notater på infoskjermen</b>\n${lines.join("\n")}\n\nTrykk for å fjerne:`,
+    notes.map((n, i) => [{ text: `❌ ${i + 1}. ${n.text.length > 40 ? `${n.text.slice(0, 39)}…` : n.text}`, callback_data: `nd:${n.id}` }]),
+  );
 }

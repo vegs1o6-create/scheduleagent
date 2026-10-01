@@ -4,7 +4,8 @@ En Telegram-bot som håndterer familiens kalender og påminnelser. Den tar imot 
 
 - **Fritekst:** «Sverre har fotball torsdag kl 17» havner rett i kalenderen, og du får en kvittering med lenke. Rettelser som «nei, kl. 09» oppdaterer siste oppføring.
 - **Ukeplan:** Du sender PDF, Word (.docx) eller bilde i Telegram, **eller legger filen i en Google Drive-mappe** (der fungerer også Google Docs). Du får en oppsummering med knappene **[OK] [Rett] [Avbryt]**, og ingenting skrives før du trykker OK.
-- **Kommandoer:** `/uke`, `/neste`, `/angre` og `/hjelp`.
+- **Kommandoer:** `/uke`, `/neste`, `/angre`, `/notat`, `/notater` og `/hjelp`.
+- **Infoskjerm:** `/skjerm` er en side for en iPad på veggen, med kalenderen til venstre og et notatfelt («Husk») til høyre. Se [Infoskjerm på iPad](#infoskjerm-på-ipad).
 - **Søndag kl. 18:** Botten minner deg på ukeplanen hvis ingen er behandlet siden mandag.
 
 ## Arkitektur
@@ -45,6 +46,7 @@ Alt arbeid mot modellen skjer i køen. PDF-analyse kan ta lenger enn de 30 sekun
 | `src/calendar.ts` | Google Calendar-klient |
 | `src/drive.ts`, `src/handlers/drive.ts` | Overvåking av Drive-mappen |
 | `src/store.ts` | KV-nøkler og tilstand |
+| `src/display.ts` | Infoskjermen (`/skjerm`): HTML-siden, kalenderdata og notater |
 | `test/` | Tester og eksempler på ukeplaner og fritekst |
 
 ## Konfigurasjon
@@ -70,6 +72,8 @@ Alt arbeid mot modellen skjer i køen. PDF-analyse kan ta lenger enn de 30 sekun
 | `EVENT_REMINDER_MINUTES` | `60` | Varsel før hendelser med klokkeslett |
 | `LOW_CONFIDENCE` | `0.7` | Punkter under denne grensen markeres med ⚠️ |
 | `DRIVE_FOLDER_ID` | tom (av) | Google Drive-mappen som overvåkes for nye ukeplaner |
+| `DISPLAY_CALENDAR_IDS` | tom (= `GOOGLE_CALENDAR_ID`) | Kalendere som vises på infoskjermen, kommaseparert |
+| `DISPLAY_DAYS` | `14` | Hvor mange dager frem infoskjermen viser |
 
 Fargekoder i Google Calendar: 1 lavendel, 2 salvie, 3 drue, **4 flamingo (rosa)**, **5 banan (gul)**, 6 mandarin, 7 påfugl, 8 grafitt, **9 blåbær (blå)**, 10 basilikum, 11 tomat.
 
@@ -92,6 +96,8 @@ npx wrangler login
    uke - Denne ukens oppføringer
    neste - De neste 7 dagene
    angre - Slett siste opprettede oppføring
+   notat - Legg til notat på infoskjermen
+   notater - Vis og fjern notater
    hjelp - Hva boten kan
    ```
 
@@ -263,11 +269,40 @@ Velger du varsel, gjelder disse tidene:
 | `google:access_token` | Cachet access token |
 | `seen:<update_id>` | Hindrer at samme oppdatering behandles to ganger |
 | `remind:<token>` | Åpne spørsmål om varsler |
+| `notes` | Notatene på infoskjermen |
 | `drive:cursor`, `drive:done:<fil-id>` | Hvor langt Drive-mappen er sjekket, og hvilke filer (og versjoner) som er behandlet |
+
+## Infoskjerm på iPad
+
+`https://familiebot.<ditt-subdomene>.workers.dev/skjerm?key=<DISPLAY_KEY>` viser:
+
+- **Venstre:** klokke, dato og kalenderen de neste 14 dagene, gruppert per dag. «I dag» er uthevet, hendelser som er ferdige tones ned, og fargene er de samme som i Google Kalender (Sverre blå, Astrid rosa, Begge gul).
+- **Høyre («Husk»):** notater som ikke hører hjemme i kalenderen. Legg til med **+ Notat** på skjermen eller `/notat tekst` i Telegram. Trykk på et notat på skjermen (eller bruk `/notater` i Telegram) for å fjerne det.
+
+Siden henter nye data hvert 2. minutt, laster seg selv på nytt ved midnatt, og følger lys/mørk modus på iPaden. Mister den kontakten, står det «Ikke oppdatert på X min» øverst til høyre. Den er skrevet for å virke også på eldre iPader (iOS 12+).
+
+### Oppsett
+
+1. Lag en nøkkel og legg den inn som secret:
+   ```bash
+   openssl rand -hex 16
+   npx wrangler secret put DISPLAY_KEY
+   ```
+   Bruk en annen verdi enn webhook-secreten. Nøkkelen gir bare tilgang til å lese kalenderen og endre notatene.
+2. Deploy (`npm run deploy`).
+3. På iPaden: åpne adressen i **Safari** → Del-knappen → **Legg til på Hjem-skjerm**. Åpnet fra Hjem-skjermen vises siden i fullskjerm uten adresselinje.
+4. Innstillinger på iPaden:
+   - **Skjerm og lysstyrke → Autolås → Aldri** (og ha laderen i).
+   - Valgfritt: **Tilgjengelighet → Guidet tilgang** låser iPaden til denne appen. Start med trippelklikk på Hjem-/toppknappen.
+   - Valgfritt: **Skjerm og lysstyrke → Automatisk** (lys/mørk) gir mørk skjerm om kvelden.
+5. Flere kalendere (f.eks. en delt jobbkalender): sett `DISPLAY_CALENDAR_IDS = "familie-id,annen-id"` i `wrangler.toml`. Google-kontoen fra steg 3 må ha tilgang til dem.
+
+Siden bruker rundt 720 kall til Google Kalender i døgnet (ett hvert 2. minutt), godt innenfor gratisgrensene. Notater skrives til KV bare når du legger til eller fjerner et.
 
 ## Sikkerhet
 
 - Hvert webhook-kall må ha riktig `X-Telegram-Bot-Api-Secret-Token`, som sammenlignes i konstant tid. Ellers svarer boten 401.
+- Infoskjermen (`/skjerm`) krever `DISPLAY_KEY` i adressen. Den kan lese kalenderen og endre notatene, men ikke endre kalenderen.
 - Meldinger og knappetrykk fra andre chat-ID-er ignoreres helt, uten svar. Dette sjekkes både i webhooken og i køen.
 - Innholdet i PDF-er, bilder og meldinger regnes som **data**. Systemprompten sier eksplisitt at kommandolignende tekst i dokumenter skal ignoreres. Modellen kan bare returnere JSON etter et fast skjema, som valideres med zod. Modellen har ingen verktøy og kan ikke slette noe.
 - **Ingenting slettes uten bekreftelse:** Sletting skjer bare etter trykk på knappen i `/angre` eller «Slett fjernede».

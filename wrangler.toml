@@ -62,3 +62,7 @@ LOW_CONFIDENCE = "0.7"
 # Google Drive-mappen som overvåkes (ID-en fra URL-en drive.google.com/drive/folders/<ID>).
 # Tom = Drive-inngangen er av.
 DRIVE_FOLDER_ID = "1kljn8OYt8eo8684BMOLiiAZufFiR2I1C"
+# Infoskjermen (/skjerm?key=<DISPLAY_KEY>): kalendere som vises (kommaseparert, tom = GOOGLE_CALENDAR_ID)
+# og hvor mange dager frem. Nøkkelen settes med `npx wrangler secret put DISPLAY_KEY`.
+DISPLAY_CALENDAR_IDS = ""
+DISPLAY_DAYS = "14"

@@ -46,6 +46,17 @@ export interface WeekplanRecord {
   entries: { agentKey: string; eventId: string; title: string; date: string; companionIds: string[] }[];
 }
 
+/** Et notat på infoskjermen (ting som ikke hører hjemme i kalenderen). */
+export interface Note {
+  id: string;
+  text: string;
+  createdAt: string;
+  source: "telegram" | "skjerm";
+}
+
+export const MAX_NOTES = 50;
+export const MAX_NOTE_LENGTH = 500;
+
 export interface PendingUndo {
   token: string;
   entries: EntryRef[];
@@ -181,6 +192,25 @@ export class Store {
     const byId = new Map(updated.map((e) => [e.eventId, e]));
     const h = (await this.getHistory()).map((group) => group.map((e) => byId.get(e.eventId) ?? e));
     await this.putJson("history", h);
+  }
+
+  /** Notatene på infoskjermen, eldste først. */
+  async getNotes(): Promise<Note[]> {
+    return (await this.getJson<Note[]>("notes")) ?? [];
+  }
+  async addNote(text: string, source: Note["source"], now: Date): Promise<Note> {
+    const note: Note = { id: newId(), text: text.trim().slice(0, MAX_NOTE_LENGTH), createdAt: now.toISOString(), source };
+    const notes = await this.getNotes();
+    notes.push(note);
+    await this.putJson("notes", notes.slice(-MAX_NOTES));
+    return note;
+  }
+  /** Fjerner et notat. Returnerer notatet som ble fjernet, eller null. */
+  async removeNote(id: string): Promise<Note | null> {
+    const notes = await this.getNotes();
+    const found = notes.find((n) => n.id === id) ?? null;
+    if (found) await this.putJson("notes", notes.filter((n) => n.id !== id));
+    return found;
   }
 
   async markOnce(key: string, ttl: number): Promise<boolean> {

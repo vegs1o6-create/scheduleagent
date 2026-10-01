@@ -17,6 +17,8 @@ export interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   GOOGLE_REFRESH_TOKEN: string;
+  /** Nøkkelen i adressen til infoskjermen (/skjerm?key=...). */
+  DISPLAY_KEY?: string;
 
   // Vars (wrangler.toml)
   TIMEZONE?: string;
@@ -35,6 +37,10 @@ export interface Env {
   EVENT_REMINDER_MINUTES?: string;
   LOW_CONFIDENCE?: string;
   DRIVE_FOLDER_ID?: string;
+  /** Kalendere som vises på infoskjermen (kommaseparert). Tom = GOOGLE_CALENDAR_ID. */
+  DISPLAY_CALENDAR_IDS?: string;
+  /** Hvor mange dager frem infoskjermen viser (standard 14). */
+  DISPLAY_DAYS?: string;
 }
 
 /** Jobber som legges i køen. */
