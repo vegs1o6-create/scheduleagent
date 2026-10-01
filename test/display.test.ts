@@ -137,3 +137,17 @@ describe("infoskjerm: vær", () => {
     expect(failing.days).toHaveLength(14);
   });
 });
+
+describe("infoskjerm: flere kalendere", () => {
+  it("slår sammen kalenderne, og viser resten når én feiler", async () => {
+    const { d } = displayDeps();
+    const listEvents = async (id: string) => {
+      if (id === "feil") throw new Error("403");
+      return [ev(`Fra ${id}`, { date: "2026-09-29" }, { date: "2026-09-30" })];
+    };
+    const data = await displayData({ ...d, listEvents, calendarIds: ["familie", "jobb", "feil"] });
+    expect(data.days[0]!.events.map((e) => e.title)).toEqual(["Fra familie", "Fra jobb"]);
+    expect(data.calendarErrors).toBe(1);
+    await expect(displayData({ ...d, listEvents, calendarIds: ["feil"] })).rejects.toThrow("403");
+  });
+});
