@@ -8,6 +8,7 @@ export interface CalendarEvent {
   summary?: string;
   description?: string;
   location?: string;
+  colorId?: string;
   start: { date?: string; dateTime?: string };
   end: { date?: string; dateTime?: string };
   extendedProperties?: { private?: Record<string, string> };

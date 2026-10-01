@@ -10,6 +10,8 @@ import { ClaudeClient } from "./claude";
 import { FoundryClient, foundrySettings } from "./foundry";
 import { handleWebhook } from "./webhook";
 import { handleSetup } from "./setup";
+import { handleDisplay, type DisplayDeps } from "./display";
+import { fetchWeather } from "./weather";
 import { processUpdate } from "./router";
 import { handleSundayReminder } from "./handlers/cron";
 import { handleDriveFile, pollDrive } from "./handlers/drive";
@@ -50,6 +52,35 @@ export function buildDeps(env: Env): Deps {
   };
 }
 
+export function buildDisplayDeps(env: Env): DisplayDeps {
+  const config = loadConfig(env);
+  const auth = new GoogleAuth(
+    {
+      clientId: (env.GOOGLE_CLIENT_ID ?? "").trim(),
+      clientSecret: (env.GOOGLE_CLIENT_SECRET ?? "").trim(),
+      refreshToken: (env.GOOGLE_REFRESH_TOKEN ?? "").trim(),
+    },
+    env.STATE,
+  );
+  const ids = (env.DISPLAY_CALENDAR_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const days = Number(env.DISPLAY_DAYS);
+  return {
+    config,
+    store: new Store(env.STATE),
+    listEvents: (calendarId, timeMin, timeMax) => new GoogleCalendar(calendarId, auth).list(timeMin, timeMax),
+    calendarIds: ids.length ? ids : [config.calendarId],
+    days: Number.isInteger(days) && days > 0 && days <= 60 ? days : 14,
+    weather:
+      env.WEATHER_LAT?.trim() && env.WEATHER_LON?.trim()
+        ? () => fetchWeather(env.WEATHER_LAT!.trim(), env.WEATHER_LON!.trim(), new Date(), config.timezone, 7)
+        : undefined,
+    now: () => new Date(),
+  };
+}
+
 export async function processJob(deps: Deps, job: JobMessage): Promise<void> {
   if (job.kind === "telegram_update") {
     await processUpdate(deps, job.update as TgUpdate);
@@ -79,6 +110,9 @@ export default {
     }
     if (request.method === "GET" && url.pathname === "/setup") {
       return handleSetup(request, env);
+    }
+    if (url.pathname === "/skjerm" || url.pathname.startsWith("/skjerm/")) {
+      return handleDisplay(request, env, buildDisplayDeps(env));
     }
     if (request.method === "GET" && url.pathname === "/health") {
       return new Response("ok");
