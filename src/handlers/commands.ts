@@ -16,7 +16,7 @@ export const HELP_TEXT = `<b>Familiebot</b> 👨‍👩‍👧‍👦
 
 <b>Send ukeplan</b> som PDF, Word (.docx) eller bilde her, eller legg filen i Drive-mappen (sjekkes hvert 5. minutt). Du får en oppsummering med [OK] [Rett] [Avbryt]; ingenting lagres før du trykker OK.
 
-<b>Varsler</b>: settes ikke opp automatisk. Etter lagring spør jeg hvilke oppføringer du vil ha varsel på.
+<b>Varsler</b>: settes ikke opp automatisk. Etter lagring spør jeg hvilke oppføringer du vil ha varsel på, og om lekser og beskjeder skal på infoskjermen.
 
 <b>Kommandoer</b>
 /uke – denne ukens oppføringer
@@ -134,7 +134,7 @@ export function formatEventList(heading: string, events: CalendarEvent[], timeZo
 
 /** Notatene med en ❌-knapp per notat (callback "nd:<id>"). */
 export async function sendNoteList(deps: Deps): Promise<void> {
-  const notes = await deps.store.getNotes();
+  const notes = await deps.store.getNotes(deps.now());
   if (!notes.length) {
     await deps.telegram.sendMessage(deps.chatId, "📝 Ingen notater på infoskjermen. Legg til med /notat tekst.");
     return;

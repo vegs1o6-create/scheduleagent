@@ -9,6 +9,7 @@ import { escapeHtml as e } from "../telegram";
 import { formatSummary } from "../summary";
 import { draftKeyboard, presentDraft } from "./drafts";
 import { askForReminders } from "./reminders";
+import { askForNotes } from "./notes";
 import { commitExtraction } from "./commit";
 import { log } from "../log";
 
@@ -103,7 +104,9 @@ export async function handleText(deps: Deps, msg: TgMessage): Promise<void> {
 
   // Bare info? Vis oppsummering uten å skrive noe.
   if (extraction.items.every((it) => it.type === "info")) {
-    await telegram.sendMessage(deps.chatId, formatSummary(extraction, config, "ℹ️ Notert (ikke kalender)"));
+    if (!(await askForNotes(deps, extraction))) {
+      await telegram.sendMessage(deps.chatId, formatSummary(extraction, config, "ℹ️ Notert (ikke kalender) – ligger allerede på infoskjermen"));
+    }
     return;
   }
 
@@ -123,6 +126,7 @@ export async function handleText(deps: Deps, msg: TgMessage): Promise<void> {
   await store.linkMessage(receiptId, written);
   await store.linkMessage(msg.message_id, written);
   await askForReminders(deps, written, extraction);
+  await askForNotes(deps, extraction);
 }
 
 /** "nei, kl. 09": oppdaterer eksisterende hendelse i stedet for å lage en ny. */

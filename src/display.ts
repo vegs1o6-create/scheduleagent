@@ -134,7 +134,7 @@ export async function displayData(deps: DisplayDeps): Promise<DisplayData> {
   const timeMax = zonedRfc3339(addDays(today, deps.days), "00:00", config.timezone);
   const [results, notes, weather] = await Promise.all([
     Promise.allSettled(deps.calendarIds.map((id) => deps.listEvents(id, timeMin, timeMax))),
-    deps.store.getNotes(),
+    deps.store.getNotes(deps.now()),
     deps.weather ? deps.weather().catch(() => null) : Promise.resolve(null),
   ]);
   // Én kalender som feiler (f.eks. manglende tilgang) skal ikke ta ned hele skjermen.
@@ -216,14 +216,14 @@ export async function handleDisplay(request: Request, env: Env, deps: DisplayDep
     if (text.length > MAX_NOTE_LENGTH) return json({ error: `Maks ${MAX_NOTE_LENGTH} tegn` }, 400);
     const note = await deps.store.addNote(text, "skjerm", deps.now());
     log("note_added", { id: note.id, source: "skjerm" });
-    return json({ note, notes: await deps.store.getNotes() });
+    return json({ note, notes: await deps.store.getNotes(deps.now()) });
   }
   if (request.method === "POST" && path === "/skjerm/notater/slett") {
     const body = (await request.json().catch(() => null)) as { id?: unknown } | null;
     const id = typeof body?.id === "string" ? body.id : "";
     const removed = await deps.store.removeNote(id);
     log("note_removed", { id, found: Boolean(removed), source: "skjerm" });
-    return json({ removed: Boolean(removed), notes: await deps.store.getNotes() });
+    return json({ removed: Boolean(removed), notes: await deps.store.getNotes(deps.now()) });
   }
   return new Response("not found", { status: 404 });
 }

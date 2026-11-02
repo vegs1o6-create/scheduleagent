@@ -48,7 +48,7 @@ Regler for punktene i "items":
 - type "event": noe som skjer på en dag (tur, foreldremøte, trening). Med klokkeslett hvis oppgitt.
 - type "deadline": noe forelderen må gjøre innen en dato (svarslipp, påmelding, betaling). Fristen i "deadline" (og "date").
 - type "reminder": noe som må huskes på en bestemt dag (gymtøy, matpakke, utedag-klær, bibliotekbok).
-- type "info": nyttig informasjon uten dato/handling (fagplan, ukens tema, lekser uten frist). Skrives ikke til kalenderen.
+- type "info": nyttig informasjon uten egen kalenderhendelse: lekser, beskjeder til hjemmet, ukens tema, fagplan. Skrives ikke til kalenderen, men forelderen kan velge å legge dem som notater på familiens infoskjerm. Lag ETT info-punkt per lekse eller beskjed (ikke slå sammen), og la tittelen inneholde selve innholdet, f.eks. "Lekse: les s. 12–15 i leseboka" eller "Ikke send med godteri (bursdag)" (gjerne opptil ~12 ord). Har leksen en dag den skal være gjort til, sett "date".
 - "title": kort (maks ~6 ord), på norsk, uten barnets navn.
 - "bring": konkrete ting som skal tas med eller huskes. Tom liste hvis ingen.
 - "action_required": hva forelderen konkret må gjøre, ellers null.
@@ -59,7 +59,7 @@ Regler for punktene i "items":
 
 Usikkerhet: Gjett aldri. Er du usikker på dato, klokkeslett, barn eller innhold, sett lav "confidence" (under 0.7) og forklar kort i "notes". Mangler datoen helt, sett "date" til null. Høy confidence (0.9+) bare når kilden er entydig.
 
-Ukeplaner: "source" = "ukeplan", "week" = ISO-uke (f.eks. "2026-W40"). Ta med alle frister, husk-ting, avvik fra vanlig timeplan, turer, arrangementer og beskjeder til hjemmet. Vanlige, faste timeplanfag uten noe spesielt skal ikke med. Lekser bare som "info", med mindre de har en egen frist. Oppsummer annet relevant i "general_notes".
+Ukeplaner: "source" = "ukeplan", "week" = ISO-uke (f.eks. "2026-W40"). Ta med alle frister, husk-ting, avvik fra vanlig timeplan, turer, arrangementer og beskjeder til hjemmet. Vanlige, faste timeplanfag uten noe spesielt skal ikke med. Lekser og beskjeder som "info"-punkter (ett per lekse/beskjed), med mindre de har en egen frist. "general_notes" er bare for kort tilleggsinfo som ikke passer som eget punkt.
 
 Fritekst: "source" = "fritekst". Én melding kan gi flere punkter.`;
 }

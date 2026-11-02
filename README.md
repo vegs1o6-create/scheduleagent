@@ -271,6 +271,7 @@ Velger du varsel, gjelder disse tidene:
 | `seen:<update_id>` | Hindrer at samme oppdatering behandles to ganger |
 | `remind:<token>` | Åpne spørsmål om varsler |
 | `notes` | Notatene på infoskjermen |
+| `notepick:<token>` | Åpne spørsmål om notater fra ukeplaner |
 | `drive:cursor`, `drive:done:<fil-id>` | Hvor langt Drive-mappen er sjekket, og hvilke filer (og versjoner) som er behandlet |
 
 ## Infoskjerm på iPad
@@ -280,6 +281,11 @@ Velger du varsel, gjelder disse tidene:
 - **Øverst:** værvarsel fra Yr for 7 dager: symbol, maks/min-temperatur og nedbør (vises fra 0,5 mm).
 - **Venstre:** klokke, dato og kalenderen de neste 14 dagene, gruppert per dag. «I dag» er uthevet, hendelser som er ferdige tones ned, og fargene er de samme som i Google Kalender (Sverre blå, Astrid rosa, Begge gul).
 - **Høyre («Husk»):** notater som ikke hører hjemme i kalenderen. Legg til med **+ Notat** på skjermen eller `/notat tekst` i Telegram. Trykk på et notat på skjermen (eller bruk `/notater` i Telegram) for å fjerne det.
+- **Lekser og beskjeder fra ukeplanen:** Etter at du har trykket OK på en ukeplan (og svart på varselspørsmålet), spør botten «📌 Vil du legge noe av dette på infoskjermen?». Det gjelder lekser, beskjeder til hjemmet og annen info som ikke ble kalenderhendelser.
+  - Du krysser av for det du vil ha med, og trykker **Legg på skjermen**. Det finnes også **Velg alle** og **Ingen**.
+  - Notater fra en ukeplan forsvinner av seg selv når uka er over. Har punktet en egen dato, forsvinner det dagen etter.
+  - Kommer samme ukeplan på nytt, foreslås ikke det som allerede ligger på skjermen.
+  - Fritekst som bare er info, f.eks. «Astrid skal ikke ha med godteri på bursdagen», gir et ja/nei-spørsmål om å legge den på skjermen.
 
 Siden henter nye data hvert 2. minutt, laster seg selv på nytt ved midnatt, og følger lys/mørk modus på iPaden. Mister den kontakten, står det «Ikke oppdatert på X min» øverst til høyre. Den er skrevet for å virke også på eldre iPader (iOS 12+).
 

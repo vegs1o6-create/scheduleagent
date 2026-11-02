@@ -51,7 +51,19 @@ export interface Note {
   id: string;
   text: string;
   createdAt: string;
-  source: "telegram" | "skjerm";
+  source: "telegram" | "skjerm" | "ukeplan";
+  /** Notatet skjules automatisk etter dette tidspunktet (f.eks. når uka er over). */
+  expiresAt?: string;
+  /** Stabil nøkkel for notater fra ukeplaner, så samme lekse ikke legges inn to ganger. */
+  key?: string;
+}
+
+/** Spørsmålet «Vil du legge noe av dette på infoskjermen?» som venter på svar. */
+export interface NotePicker {
+  token: string;
+  candidates: { text: string; expiresAt?: string; key: string }[];
+  selected: number[];
+  messageId?: number;
 }
 
 export const MAX_NOTES = 50;
@@ -194,16 +206,40 @@ export class Store {
     await this.putJson("history", h);
   }
 
-  /** Notatene på infoskjermen, eldste først. */
-  async getNotes(): Promise<Note[]> {
-    return (await this.getJson<Note[]>("notes")) ?? [];
+  /** Notatene på infoskjermen, eldste først. Utløpte notater tas ikke med. */
+  async getNotes(now: Date = new Date()): Promise<Note[]> {
+    const notes = (await this.getJson<Note[]>("notes")) ?? [];
+    return notes.filter((n) => !n.expiresAt || new Date(n.expiresAt) > now);
   }
-  async addNote(text: string, source: Note["source"], now: Date): Promise<Note> {
-    const note: Note = { id: newId(), text: text.trim().slice(0, MAX_NOTE_LENGTH), createdAt: now.toISOString(), source };
-    const notes = await this.getNotes();
+  async addNote(
+    text: string,
+    source: Note["source"],
+    now: Date,
+    opts: { expiresAt?: string; key?: string } = {},
+  ): Promise<Note> {
+    const notes = await this.getNotes(now);
+    const existing = opts.key ? notes.find((n) => n.key === opts.key) : undefined;
+    if (existing) return existing;
+    const note: Note = {
+      id: newId(),
+      text: text.trim().slice(0, MAX_NOTE_LENGTH),
+      createdAt: now.toISOString(),
+      source,
+      ...(opts.expiresAt ? { expiresAt: opts.expiresAt } : {}),
+      ...(opts.key ? { key: opts.key } : {}),
+    };
     notes.push(note);
     await this.putJson("notes", notes.slice(-MAX_NOTES));
     return note;
+  }
+  saveNotePicker(p: NotePicker) {
+    return this.putJson(`notepick:${p.token}`, p, 7 * DAY);
+  }
+  getNotePicker(token: string) {
+    return this.getJson<NotePicker>(`notepick:${token}`);
+  }
+  async clearNotePicker(token: string) {
+    await this.kv.delete(`notepick:${token}`);
   }
   /** Fjerner et notat. Returnerer notatet som ble fjernet, eller null. */
   async removeNote(id: string): Promise<Note | null> {

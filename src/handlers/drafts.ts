@@ -5,6 +5,7 @@ import { formatReceipt, formatSummary } from "../summary";
 import type { Keyboard } from "../telegram";
 import { commitExtraction } from "./commit";
 import { askForReminders } from "./reminders";
+import { askForNotes } from "./notes";
 
 export function draftKeyboard(draftId: string): Keyboard {
   return [
@@ -46,4 +47,5 @@ export async function approveExtraction(deps: Deps, extraction: Extraction): Pro
   if (result.written.length) await deps.store.linkMessage(msgId, result.written);
   if (extraction.source === "ukeplan") await deps.store.setLastWeekplanAt(deps.now().toISOString());
   await askForReminders(deps, result.written, extraction);
+  await askForNotes(deps, extraction);
 }
